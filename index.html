@@ -601,7 +601,92 @@
   .observer-btn:hover { color: var(--text); border-color: var(--text-dim); }
   .observer-btn.danger:hover { color: var(--red); border-color: var(--red); }
 
-  /* Observer color chip in pass table */
+  /* My Satellites list item */
+  .my-sat-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--amber);
+    cursor: pointer;
+    transition: background 0.15s;
+    margin-bottom: 4px;
+  }
+  .my-sat-item:hover { background: var(--panel); }
+  .my-sat-item.active {
+    background: rgba(255, 182, 39, 0.08);
+    box-shadow: inset 0 0 0 1px var(--amber);
+  }
+  .my-sat-item.inactive { opacity: 0.5; }
+  .sat-color-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 5px;
+    vertical-align: middle;
+    border: 1px solid rgba(0,0,0,0.3);
+  }
+  .my-sat-item.inactive { opacity: 0.45; }
+  .my-sat-info { flex: 1; min-width: 0; overflow: hidden; }
+  .my-sat-name {
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .my-sat-meta {
+    color: var(--text-dim);
+    font-size: 10px;
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .my-sat-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
+  /* Discover/Browse list — "add to my satellites" mode */
+  .sat-item-add {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    cursor: default;
+  }
+  .sat-item-add:hover { background: var(--panel-2); }
+  .sat-item-add .name {
+    flex: 1;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sat-item-add .id {
+    color: var(--text-faint);
+    font-size: 10px;
+  }
+  .sat-item-add .add-btn {
+    background: transparent;
+    border: 1px solid var(--cyan-dim);
+    color: var(--cyan);
+    width: 28px; height: 24px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    flex-shrink: 0;
+  }
+  .sat-item-add .add-btn:hover { background: var(--cyan-dim); color: var(--bg); }
+  .sat-item-add .add-btn.saved {
+    border-color: var(--green);
+    color: var(--green);
+    cursor: default;
+  }
   .obs-chip {
     display: inline-block;
     width: 9px;
@@ -868,6 +953,7 @@
     .pass-table.compact { font-size: 11px; }
     /* Hide the detail header explicitly, show the compact header */
     .pass-table.compact #pass-thead-detail { display: none !important; }
+    .pass-table.compact #pass-thead-multi { display: none !important; }
     .pass-table.compact #pass-thead-compact { display: table-header-group !important; }
     .pass-table.compact #pass-thead-compact th {
       padding: 6px 3px;
@@ -877,6 +963,42 @@
       top: 0;
       background: var(--bg-2);
       z-index: 5;
+    }
+    /* Multi-contact mode shares some of compact's mobile styling */
+    .pass-table.multi #pass-thead-detail { display: none !important; }
+    .pass-table.multi #pass-thead-compact { display: none !important; }
+    .pass-table.multi #pass-thead-multi { display: table-header-group !important; }
+    .pass-table.multi #pass-thead-multi th {
+      padding: 6px 3px;
+      font-size: 8px;
+      letter-spacing: 0.04em;
+      position: sticky;
+      top: 0;
+      background: var(--bg-2);
+      z-index: 5;
+    }
+    .pass-table.multi { font-size: 11px; }
+    .pass-table.multi tr { display: table-row !important; background: transparent !important; box-shadow: none !important; }
+    .pass-table.multi tr.selected { box-shadow: inset 0 0 0 1px var(--amber) !important; background: rgba(255,182,39,0.06) !important; }
+    .pass-table.multi td {
+      display: table-cell !important;
+      padding: 8px 3px !important;
+      font-size: 11px !important;
+      border: none !important;
+      border-bottom: 1px solid var(--border) !important;
+      padding-left: 3px !important;
+      min-height: 0 !important;
+      text-align: left;
+      vertical-align: middle;
+    }
+    .pass-table.multi td::before { display: none !important; }
+    .pass-table.multi td.num-cell {
+      font-size: 10px !important;
+      font-weight: 700;
+      color: var(--magenta) !important;
+      padding-left: 6px !important;
+      border-bottom: 1px solid var(--border) !important;
+      padding-bottom: 8px !important;
     }
     .pass-table.compact tr {
       display: table-row !important;
@@ -1028,11 +1150,67 @@
     </div>
 
     <div class="panel">
-      <div class="panel-header"><span class="panel-title">Satellite Catalog</span></div>
+      <div class="panel-header">
+        <span class="panel-title">My Satellites</span>
+        <span style="display:flex;gap:10px;align-items:center;">
+          <span style="color:var(--green);font-size:9px;letter-spacing:0.15em;" title="Saved to browser storage">⬢ CACHED</span>
+          <span class="panel-title" id="my-sat-count" style="color:var(--cyan);"></span>
+        </span>
+      </div>
       <div class="panel-body">
-        <label>Quick load from CelesTrak</label>
+        <div class="sat-list" id="my-sat-list" style="display:block;max-height:280px;"></div>
+        <div class="btn-row" style="margin-top:10px;">
+          <button class="btn ghost" id="add-sat-btn">+ Add Satellite</button>
+          <button class="btn ghost" id="refresh-tles-btn" title="Re-fetch latest TLEs from CelesTrak">⟳ Refresh TLEs</button>
+        </div>
+        <div class="btn-row" style="margin-top:6px;">
+          <button class="btn ghost" id="reset-sats-btn" title="Restore defaults">⟲ Reset to defaults</button>
+        </div>
+        <div id="my-sat-status" class="note" style="margin-top:8px;display:none;"></div>
+      </div>
+    </div>
+
+    <!-- Inline satellite editor -->
+    <div class="panel" id="sat-editor" style="display:none; border-color: var(--amber);">
+      <div class="panel-header" style="background: rgba(255,182,39,0.06);">
+        <span class="panel-title" style="color:var(--amber);" id="sat-editor-title">▸ Add Satellite</span>
+        <span class="panel-title" style="cursor:pointer;color:var(--red);" id="sat-editor-close">✕</span>
+      </div>
+      <div class="panel-body">
+        <div style="display:flex;gap:6px;margin-bottom:10px;">
+          <button class="pass-mode-btn active" data-sat-method="auto">⌕ By Name / ID</button>
+          <button class="pass-mode-btn" data-sat-method="manual">⌨ Manual TLE</button>
+        </div>
+
+        <!-- Auto-fetch by name/ID -->
+        <div id="sat-method-auto">
+          <label>Satellite Name or NORAD ID</label>
+          <input id="sat-query" type="text" placeholder="e.g. ISS, HUBBLE, 25544">
+          <button class="btn" id="sat-fetch-btn" style="margin-top:10px;">⌕ Fetch & Save</button>
+          <div id="sat-fetch-status" class="note" style="margin-top:6px;display:none;"></div>
+        </div>
+
+        <!-- Manual TLE -->
+        <div id="sat-method-manual" style="display:none;">
+          <label>Display Name</label>
+          <input id="sat-manual-name" type="text" placeholder="e.g. My Custom Sat">
+          <label>TLE Line 1</label>
+          <textarea id="sat-manual-l1" placeholder="1 25544U 98067A   ..."></textarea>
+          <label>TLE Line 2</label>
+          <textarea id="sat-manual-l2" placeholder="2 25544  51.6...."></textarea>
+          <button class="btn amber" id="sat-save-manual" style="margin-top:10px;">▸ Save Satellite</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Optional: Browse CelesTrak groups to discover new sats -->
+    <div class="panel" id="browse-panel">
+      <div class="panel-header">
+        <span class="panel-title" id="browse-toggle" style="cursor:pointer;">▸ Browse CelesTrak</span>
+      </div>
+      <div class="panel-body" id="browse-body" style="display:none;">
+        <label>Browse a CelesTrak group</label>
         <select id="celestrak-group">
-          <option value="preset">★ Featured (NEONSAT, SPACEEYE, ETIHAD-SAT)</option>
           <option value="stations">Space Stations (ISS, CSS...)</option>
           <option value="active">Active Satellites</option>
           <option value="visual">Brightest / Visible</option>
@@ -1047,23 +1225,8 @@
           <option value="science">Science</option>
         </select>
         <button class="btn" id="load-celestrak">▸ Fetch Catalog</button>
-        <div id="catalog-status" class="note">No catalog loaded.</div>
-        <div class="sat-list" id="sat-list" style="display:none;"></div>
-      </div>
-    </div>
-
-    <div class="panel">
-      <div class="panel-header"><span class="panel-title">Manual TLE Input</span></div>
-      <div class="panel-body">
-        <label>Satellite Name or NORAD ID</label>
-        <input id="tle-name" type="text" placeholder="e.g. ISS, STARLINK-1234, or 25544">
-        <button class="btn ghost" id="auto-fetch-tle">⌕ Auto-fetch TLE from CelesTrak</button>
-        <div id="auto-fetch-status" class="note" style="display:none;"></div>
-        <label>TLE Line 1</label>
-        <textarea id="tle-l1" placeholder="1 25544U 98067A   ..."></textarea>
-        <label>TLE Line 2</label>
-        <textarea id="tle-l2" placeholder="2 25544  51.6...."></textarea>
-        <button class="btn amber" id="load-tle">▸ Track Satellite</button>
+        <div id="catalog-status" class="note">Browse to find new satellites, then click ⊕ to save.</div>
+        <div class="sat-list" id="sat-list" style="display:none;max-height:240px;"></div>
       </div>
     </div>
 
@@ -1178,6 +1341,7 @@
           <div class="pass-mode-toggle">
             <button class="pass-mode-btn" data-pass-mode="detail" title="Detail mode">≡ Detail</button>
             <button class="pass-mode-btn" data-pass-mode="compact" title="Compact mode">⋮ Compact</button>
+            <button class="pass-mode-btn" data-pass-mode="multi" title="Multi-contact mode — find times when 2+ satellites are simultaneously visible">⧉ Multi</button>
           </div>
           <span class="panel-title" id="pass-count" style="color:var(--cyan);"></span>
         </div>
@@ -1229,6 +1393,7 @@
           <thead id="pass-thead-detail">
             <tr>
               <th>#</th>
+              <th>Satellite</th>
               <th>Observer</th>
               <th>AOS · <span style="color:var(--cyan)">UTC</span> / <span style="color:var(--amber)">KST</span></th>
               <th>Az</th>
@@ -1241,6 +1406,7 @@
           <thead id="pass-thead-compact" style="display:none;">
             <tr>
               <th>#</th>
+              <th>Sat</th>
               <th>Obs</th>
               <th>Date</th>
               <th>AOS <span style="color:var(--amber)">KST</span></th>
@@ -1249,8 +1415,18 @@
               <th>Dur</th>
             </tr>
           </thead>
+          <thead id="pass-thead-multi" style="display:none;">
+            <tr>
+              <th>#</th>
+              <th>Observer</th>
+              <th>Sats Visible</th>
+              <th>Start <span style="color:var(--amber)">KST</span></th>
+              <th>End <span style="color:var(--amber)">KST</span></th>
+              <th>Overlap</th>
+            </tr>
+          </thead>
           <tbody id="pass-tbody">
-            <tr><td colspan="7" class="note" style="padding:18px;text-align:center;">No active target. Load a satellite to compute passes.</td></tr>
+            <tr><td colspan="9" class="note" style="padding:18px;text-align:center;">No active target. Load a satellite to compute passes.</td></tr>
           </tbody>
         </table>
       </div>
@@ -1510,7 +1686,9 @@ const state = {
   preview: null,
   passTrackLayer: null,
   // Pass prediction time range. null = default rolling "Next 72h"
-  passRange: null,  // { startTime: Date, endTime: Date, label: string } or null
+  passRange: null,
+  // Markers for all active satellites (besides primary target)
+  allSatMarkers: {},  // map of sat key → marker
 };
 
 // Validate primary observer id
@@ -1637,26 +1815,37 @@ function refreshObserverMarkers() {
     state.obsMarkers[obs.id] = marker;
   });
 }
-function satIcon() {
-  const amber = themeColor('amber');
+function satIcon(color, isSecondary) {
+  const c = color || themeColor('amber');
   const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
-  const core = isDark ? '#fff' : amber;
-  const glow = isDark ? `filter:drop-shadow(0 0 8px ${amber}) drop-shadow(0 0 16px ${amber}88);` : `filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4));`;
+  const core = isDark ? '#fff' : c;
+  const glow = isDark ? `filter:drop-shadow(0 0 8px ${c}) drop-shadow(0 0 16px ${c}88);` : `filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4));`;
+  const size = isSecondary ? 26 : 36;
+  const half = size / 2;
+  const ringR = isSecondary ? 10 : 14;
+  const ringStart = isSecondary ? 7 : 10;
+  const ringEnd = isSecondary ? 12 : 16;
+  const dotR = isSecondary ? 4 : 6;
+  const innerR = isSecondary ? 1.5 : 2;
+  const lineFrom = isSecondary ? 2 : 2;
+  const lineTo = isSecondary ? 5 : 8;
+  const lineFar = isSecondary ? size - 2 : size - 2;
+  const lineNear = isSecondary ? size - 5 : size - 8;
   return L.divIcon({
-    html: `<svg width="36" height="36" viewBox="0 0 36 36" style="${glow}">
-      <circle cx="18" cy="18" r="14" fill="none" stroke="${amber}" stroke-width="1" opacity="0.3">
-        <animate attributeName="r" values="10;16;10" dur="2s" repeatCount="indefinite"/>
+    html: `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="${glow}">
+      <circle cx="${half}" cy="${half}" r="${ringR}" fill="none" stroke="${c}" stroke-width="1" opacity="0.3">
+        <animate attributeName="r" values="${ringStart};${ringEnd};${ringStart}" dur="2s" repeatCount="indefinite"/>
         <animate attributeName="opacity" values="0.5;0;0.5" dur="2s" repeatCount="indefinite"/>
       </circle>
-      <circle cx="18" cy="18" r="6" fill="${amber}" stroke="${core}" stroke-width="1.5"/>
-      <circle cx="18" cy="18" r="2" fill="${core}"/>
-      <line x1="18" y1="2" x2="18" y2="8" stroke="${amber}" stroke-width="2" stroke-linecap="round"/>
-      <line x1="18" y1="28" x2="18" y2="34" stroke="${amber}" stroke-width="2" stroke-linecap="round"/>
-      <line x1="2" y1="18" x2="8" y2="18" stroke="${amber}" stroke-width="2" stroke-linecap="round"/>
-      <line x1="28" y1="18" x2="34" y2="18" stroke="${amber}" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="${half}" cy="${half}" r="${dotR}" fill="${c}" stroke="${core}" stroke-width="1.5"/>
+      <circle cx="${half}" cy="${half}" r="${innerR}" fill="${core}"/>
+      <line x1="${half}" y1="${lineFrom}" x2="${half}" y2="${lineTo}" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="${half}" y1="${lineNear}" x2="${half}" y2="${lineFar}" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="${lineFrom}" y1="${half}" x2="${lineTo}" y2="${half}" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="${lineNear}" y1="${half}" x2="${lineFar}" y2="${half}" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
     </svg>`,
-    iconSize: [36, 36],
-    iconAnchor: [18, 18],
+    iconSize: [size, size],
+    iconAnchor: [half, half],
     className: '',
   });
 }
@@ -1825,7 +2014,7 @@ function refineCrossing(satrec, t0, t1, threshold, obsGd, ascending) {
   return { date: final, az: deg(la.azimuth) };
 }
 
-// Predict passes across ALL active observers and merge into a single time-sorted list
+// Predict passes across ALL active observers for a single satellite
 function predictAllPasses(satrec, hoursOrOptions = 72, minElevation = 0) {
   const active = getActiveObservers();
   const all = [];
@@ -1840,6 +2029,121 @@ function predictAllPasses(satrec, hoursOrOptions = 72, minElevation = 0) {
   }
   all.sort((a, b) => a.aos.getTime() - b.aos.getTime());
   return all;
+}
+
+// Predict passes for ALL active satellites × ALL active observers, merged & time-sorted
+function predictAllSatPasses(hoursOrOptions = 72, minElevation = 0) {
+  const activeSats = getActiveSats();
+  const activeObs = getActiveObservers();
+  const all = [];
+  for (const sat of activeSats) {
+    let satrec;
+    try {
+      satrec = satellite.twoline2satrec(sat.l1, sat.l2);
+      if (satrec.error) continue;
+    } catch (_) { continue; }
+    for (const obs of activeObs) {
+      const passes = predictPasses(satrec, obs, hoursOrOptions, minElevation);
+      for (const p of passes) {
+        p.satName = sat.name;
+        p.satNorad = sat.norad || '';
+        p.satColor = sat.color || '#888';
+        p.satIdx = state.mySats.indexOf(sat);
+        p.observerId = obs.id;
+        p.observerName = obs.name;
+        p.observerColor = obs.color;
+        all.push(p);
+      }
+    }
+  }
+  all.sort((a, b) => a.aos.getTime() - b.aos.getTime());
+  return all;
+}
+
+// Find overlapping passes — when 2+ satellites are visible from the same observer simultaneously
+// Returns an array of "multi-contact events":
+// { observerId, observerName, observerColor, startTime, endTime, duration, sats: [{ name, color, norad, aos, los, maxEl }] }
+function findMultiContactEvents(passes) {
+  if (!passes || !passes.length) return [];
+  // Group passes by observer
+  const byObs = {};
+  for (const p of passes) {
+    if (!p.observerId) continue;
+    if (!byObs[p.observerId]) byObs[p.observerId] = [];
+    byObs[p.observerId].push(p);
+  }
+
+  const events = [];
+  for (const obsId of Object.keys(byObs)) {
+    const obsPasses = byObs[obsId].slice().sort((a, b) => a.aos.getTime() - b.aos.getTime());
+    if (obsPasses.length < 2) continue;
+    const obsName = obsPasses[0].observerName;
+    const obsColor = obsPasses[0].observerColor;
+
+    // Sweep through time. Two-pointer style:
+    // For each pass, find all other passes whose AOS < this pass's LOS AND LOS > this pass's AOS.
+    // Group overlapping passes into events.
+    // Build "active sets": at any moment, which passes are ongoing.
+    // We use event-based sweep to find time intervals where 2+ passes overlap.
+
+    const events_unsorted = [];
+    obsPasses.forEach(p => {
+      events_unsorted.push({ time: p.aos.getTime(), type: 'start', pass: p });
+      events_unsorted.push({ time: p.los.getTime(), type: 'end', pass: p });
+    });
+    events_unsorted.sort((a, b) => a.time - b.time || (a.type === 'end' ? -1 : 1));
+
+    const active = new Set();
+    let multiStart = null;
+    let inMulti = false;
+    let multiSats = new Set();
+
+    for (const ev of events_unsorted) {
+      if (ev.type === 'start') {
+        active.add(ev.pass);
+      } else {
+        active.delete(ev.pass);
+      }
+      if (active.size >= 2 && !inMulti) {
+        inMulti = true;
+        multiStart = ev.time;
+        multiSats = new Set([...active].map(p => p.satNorad || p.satName));
+      } else if (active.size >= 2 && inMulti) {
+        // Track which sats were involved during this multi event
+        for (const p of active) multiSats.add(p.satNorad || p.satName);
+      } else if (active.size < 2 && inMulti) {
+        // End of multi-contact event
+        const endTime = ev.time;
+        // Collect detailed info of sats that participated
+        // We need to know which sats overlapped specifically during [multiStart, endTime]
+        const participatingPasses = obsPasses.filter(p =>
+          p.aos.getTime() < endTime && p.los.getTime() > multiStart
+        );
+        if (participatingPasses.length >= 2) {
+          events.push({
+            observerId: obsId,
+            observerName: obsName,
+            observerColor: obsColor,
+            startTime: new Date(multiStart),
+            endTime: new Date(endTime),
+            duration: endTime - multiStart,
+            sats: participatingPasses.map(p => ({
+              name: p.satName,
+              norad: p.satNorad,
+              color: p.satColor,
+              aos: p.aos,
+              los: p.los,
+              maxEl: p.maxEl,
+            })),
+          });
+        }
+        inMulti = false;
+        multiStart = null;
+      }
+    }
+  }
+  events.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+  return events;
 }
 
 // Get the current options for pass prediction based on user's selected range
@@ -1888,15 +2192,24 @@ function setTarget(name, l1, l2, noradId) {
     `;
 
     const passes = predictAllPasses(satrec, getPassPredictionOptions(), 0);
-    state.passes = passes;
-    renderPassTable(passes);
-    document.getElementById('pass-count').textContent = `${passes.length} PASSES · ${getActiveObservers().length} OBS`;
+    // If multiple sats are active, use combined predictions instead
+    const activeSats = getActiveSats();
+    if (activeSats.length > 0) {
+      state.passes = predictAllSatPasses(getPassPredictionOptions(), 0);
+      document.getElementById('pass-count').textContent =
+        `${state.passes.length} PASSES · ${activeSats.length} SATS · ${getActiveObservers().length} OBS`;
+    } else {
+      // Tag single-target passes with sat name for table display
+      passes.forEach(p => { p.satName = name; p.satNorad = state.target.norad || ''; });
+      state.passes = passes;
+      document.getElementById('pass-count').textContent =
+        `${passes.length} PASSES · ${getActiveObservers().length} OBS`;
+    }
+    renderPassTable(state.passes);
     updatePassPanelTitle();
 
-    // highlight in list
-    document.querySelectorAll('.sat-item').forEach(el => el.classList.remove('active'));
-    const matchItem = document.querySelector(`.sat-item[data-name="${cssEscape(name)}"]`);
-    if (matchItem) matchItem.classList.add('active');
+    // highlight in My Satellites list
+    renderMySatList();
 
     // On mobile, switch to live data view after target selection
     if (window.innerWidth <= 900 && window.showPane) {
@@ -1924,65 +2237,88 @@ function epochString(satrec) {
 
 function drawGroundTrack() {
   if (state.trackLayer) map.removeLayer(state.trackLayer);
-  if (!state.target) return;
-  const period = (2 * Math.PI / state.target.satrec.no); // min
-  const now = new Date();
-  const fwdMin = Math.min(period * 1.5, 240);
-  const backMin = Math.min(period * 0.5, 60);
 
-  const cyan = themeColor('cyan');
-  const amber = themeColor('amber');
+  // Gather satellites to render: all active sats with cached TLEs, plus current target if not in the list
+  const sats = [];
+  for (const s of state.mySats) {
+    if (!s.active) continue;
+    if (!s.l1 || !s.l2) continue;
+    try {
+      const satrec = satellite.twoline2satrec(s.l1, s.l2);
+      if (satrec.error) continue;
+      sats.push({ name: s.name, color: s.color || '#ffb627', satrec, isTarget: state.target && state.target.norad === s.norad });
+    } catch (_) { continue; }
+  }
+  // Ensure the currently tracked target is always drawn even if not in My Sats
+  if (state.target && !sats.some(s => s.isTarget)) {
+    sats.push({ name: state.target.name, color: '#ffb627', satrec: state.target.satrec, isTarget: true });
+  }
+  if (!sats.length) return;
+
   const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
-  const coreColor = isDark ? '#ffffff' : amber;
-
-  const futureSegs = computeGroundTrack(state.target.satrec, now, fwdMin, 20);
-  const pastStart = new Date(now.getTime() - backMin * 60 * 1000);
-  const pastSegs = computeGroundTrack(state.target.satrec, pastStart, backMin, 20);
-
+  const now = new Date();
   const group = L.layerGroup();
 
-  // PAST track — dashed, dim cyan
-  pastSegs.forEach(seg => {
-    if (seg.length > 1) {
-      L.polyline(seg, { color: cyan, weight: 5, opacity: 0.12, lineCap: 'round' }).addTo(group);
-      L.polyline(seg, { color: cyan, weight: 1.8, opacity: 0.55, dashArray: '2 5', lineCap: 'round' }).addTo(group);
-    }
-  });
+  for (const sat of sats) {
+    const period = (2 * Math.PI / sat.satrec.no);
+    const fwdMin = Math.min(period * 1.5, 240);
+    const backMin = Math.min(period * 0.5, 60);
+    const color = sat.color;
+    const coreColor = isDark ? '#ffffff' : color;
+    // Highlight target with brighter weights, others slightly subdued
+    const isPrimary = sat.isTarget || sats.length === 1;
+    const weightMul = isPrimary ? 1 : 0.7;
+    const opacityMul = isPrimary ? 1 : 0.8;
 
-  // FUTURE track — solid amber with strong glow
-  futureSegs.forEach(seg => {
-    if (seg.length > 1) {
-      if (isDark) {
-        L.polyline(seg, { color: amber, weight: 8, opacity: 0.18, lineCap: 'round' }).addTo(group);
+    const futureSegs = computeGroundTrack(sat.satrec, now, fwdMin, 20);
+    const pastSegs = computeGroundTrack(sat.satrec, new Date(now.getTime() - backMin * 60 * 1000), backMin, 20);
+
+    // PAST track — dim dashed, same color but very faint
+    pastSegs.forEach(seg => {
+      if (seg.length > 1) {
+        L.polyline(seg, { color, weight: 1.5 * weightMul, opacity: 0.35 * opacityMul, dashArray: '2 5', lineCap: 'round' }).addTo(group);
       }
-      L.polyline(seg, { color: amber, weight: 4, opacity: 0.55, lineCap: 'round' }).addTo(group);
-      L.polyline(seg, { color: coreColor, weight: 1.8, opacity: 0.95, lineCap: 'round' }).addTo(group);
-    }
-  });
+    });
 
-  // Direction arrows
-  futureSegs.forEach(seg => {
-    if (seg.length < 4) return;
-    const interval = Math.floor(seg.length / 4);
-    for (let i = interval; i < seg.length - 1; i += interval) {
-      const p1 = seg[i];
-      const p2 = seg[i + 1];
-      const angle = Math.atan2(p2[1] - p1[1], p2[0] - p1[0]) * 180 / Math.PI;
-      const arrowIcon = L.divIcon({
-        html: `<div style="
-          color:${amber};
-          font-size:14px;
-          text-shadow:0 0 6px ${amber}, 0 0 2px #000;
-          transform:rotate(${90 - angle}deg);
-          font-weight:bold;
-        ">▶</div>`,
-        iconSize: [14, 14],
-        iconAnchor: [7, 7],
-        className: '',
+    // FUTURE track — colored with glow (dark themes) and bright core
+    futureSegs.forEach(seg => {
+      if (seg.length > 1) {
+        if (isDark && isPrimary) {
+          L.polyline(seg, { color, weight: 8 * weightMul, opacity: 0.18, lineCap: 'round' }).addTo(group);
+        }
+        L.polyline(seg, { color, weight: 3.5 * weightMul, opacity: 0.6 * opacityMul, lineCap: 'round' }).addTo(group);
+        L.polyline(seg, { color: coreColor, weight: 1.5 * weightMul, opacity: 0.9 * opacityMul, lineCap: 'round' }).addTo(group);
+      }
+    });
+
+    // Direction arrow at start of each future segment (only for the primary/target)
+    if (isPrimary) {
+      futureSegs.forEach(seg => {
+        if (seg.length < 4) return;
+        const interval = Math.floor(seg.length / 4);
+        for (let i = interval; i < seg.length - 1; i += interval) {
+          const p1 = seg[i];
+          const p2 = seg[i + 1];
+          const angle = Math.atan2(p2[1] - p1[1], p2[0] - p1[0]) * 180 / Math.PI;
+          const arrowIcon = L.divIcon({
+            html: `<div style="color:${color};font-size:13px;text-shadow:0 0 6px ${color}, 0 0 2px #000;transform:rotate(${90 - angle}deg);font-weight:bold;">▶</div>`,
+            iconSize: [13, 13], iconAnchor: [6, 6], className: '',
+          });
+          L.marker(p1, { icon: arrowIcon, interactive: false }).addTo(group);
+        }
       });
-      L.marker(p1, { icon: arrowIcon, interactive: false }).addTo(group);
     }
-  });
+
+    // Label the satellite name near the start of its future track
+    if (futureSegs.length && futureSegs[0].length > 0 && !isPrimary) {
+      const labelPos = futureSegs[0][0];
+      const labelIcon = L.divIcon({
+        html: `<div style="background:rgba(0,0,0,0.7);color:${color};font-size:10px;padding:2px 6px;font-family:'JetBrains Mono',monospace;font-weight:600;border:1px solid ${color};box-shadow:0 0 6px ${color};border-radius:2px;white-space:nowrap;">${sat.name}</div>`,
+        iconSize: [80, 16], iconAnchor: [-4, 8], className: '',
+      });
+      L.marker(labelPos, { icon: labelIcon, interactive: false }).addTo(group);
+    }
+  }
 
   group.addTo(map);
   state.trackLayer = group;
@@ -2002,26 +2338,67 @@ function renderPassTable(passes) {
   const table = document.getElementById('pass-table');
   const theadDetail = document.getElementById('pass-thead-detail');
   const theadCompact = document.getElementById('pass-thead-compact');
+  const theadMulti = document.getElementById('pass-thead-multi');
 
-  // Apply mode class — CSS handles thead visibility based on the class
-  if (passDisplayMode === 'compact') {
-    table.classList.add('compact');
-  } else {
-    table.classList.remove('compact');
-  }
-  // For desktop, also toggle inline display for the alternate thead
-  // (mobile rules override this via !important selectors)
-  if (passDisplayMode === 'compact') {
-    theadDetail.style.display = 'none';
-    theadCompact.style.display = '';
-  } else {
-    theadDetail.style.display = '';
-    theadCompact.style.display = 'none';
+  // Apply mode class — CSS handles thead visibility based on the class on mobile
+  table.classList.remove('compact', 'multi');
+  if (passDisplayMode === 'compact') table.classList.add('compact');
+  else if (passDisplayMode === 'multi') table.classList.add('multi');
+
+  // For desktop, toggle inline display
+  theadDetail.style.display = (passDisplayMode === 'detail') ? '' : 'none';
+  theadCompact.style.display = (passDisplayMode === 'compact') ? '' : 'none';
+  theadMulti.style.display = (passDisplayMode === 'multi') ? '' : 'none';
+
+  // ============ MULTI-CONTACT MODE ============
+  if (passDisplayMode === 'multi') {
+    const events = findMultiContactEvents(passes);
+    state.multiContactEvents = events;
+    if (!events.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="note" style="padding:18px;text-align:center;">
+        No multi-contact events found.<br>
+        <span style="font-size:10px;">Activate 2+ satellites in the Sats tab to detect simultaneous visibility.</span>
+      </td></tr>`;
+      return;
+    }
+    const now = Date.now();
+    const previewIdx = state.preview && state.preview.multiIndex !== undefined ? state.preview.multiIndex : -1;
+    tbody.innerHTML = events.map((ev, i) => {
+      const ongoing = now >= ev.startTime.getTime() && now <= ev.endTime.getTime();
+      const selected = i === previewIdx;
+      const classes = [];
+      if (ongoing) classes.push('passing');
+      if (selected) classes.push('selected');
+      const satChips = ev.sats.map(s =>
+        `<span style="display:inline-flex;align-items:center;gap:3px;margin-right:6px;white-space:nowrap;">
+          <span class="obs-chip" style="background:${s.color};box-shadow:0 0 4px ${s.color};"></span>
+          <span style="color:${s.color};font-weight:500;">${s.name}</span>
+          <span style="color:var(--text-dim);font-size:10px;">${s.maxEl.toFixed(0)}°</span>
+        </span>`
+      ).join('');
+      const dateStr = fmtKSTDateOnly(ev.startTime);
+      return `
+      <tr class="${classes.join(' ')}" data-multi-index="${i}" style="cursor:pointer;">
+        <td class="num-cell" data-label="#">${pad(i+1)}</td>
+        <td data-label="Observer"><span class="obs-chip" style="background:${ev.observerColor};box-shadow:0 0 4px ${ev.observerColor};"></span><span class="obs-name-cell" style="color:${ev.observerColor};">${ev.observerName}</span></td>
+        <td data-label="Sats Visible"><div style="display:flex;flex-wrap:wrap;gap:4px 0;">${satChips}</div><div class="small" style="color:var(--text-dim);">${ev.sats.length} sats simultaneously</div></td>
+        <td data-label="Start"><span style="color:var(--magenta);font-weight:500;">${fmtKSTTime(ev.startTime)}</span><div class="small">${dateStr}</div></td>
+        <td data-label="End"><span style="color:var(--magenta);font-weight:500;">${fmtKSTTime(ev.endTime)}</span></td>
+        <td data-label="Overlap"><span style="color:var(--cyan);font-weight:500;">${fmtDuration(ev.duration)}</span></td>
+      </tr>`;
+    }).join('');
+    tbody.querySelectorAll('tr[data-multi-index]').forEach(tr => {
+      tr.addEventListener('click', () => {
+        const idx = parseInt(tr.dataset.multiIndex);
+        enterMultiPreview(idx);
+      });
+    });
+    return;
   }
 
   if (!passes.length) {
-    const colspan = passDisplayMode === 'compact' ? 7 : 8;
-    tbody.innerHTML = `<tr><td colspan="${colspan}" class="note" style="padding:18px;text-align:center;">No passes above horizon in next 72 hours.</td></tr>`;
+    const colspan = passDisplayMode === 'compact' ? 8 : 9;
+    tbody.innerHTML = `<tr><td colspan="${colspan}" class="note" style="padding:18px;text-align:center;">No passes above horizon in the selected range.</td></tr>`;
     return;
   }
   const now = Date.now();
@@ -2034,15 +2411,17 @@ function renderPassTable(passes) {
       const classes = [];
       if (passing) classes.push('passing');
       if (selected) classes.push('selected');
-      // Group by date with subtle visual separator
       const prevDate = i > 0 ? fmtKSTDateOnly(passes[i-1].aos) : null;
       const thisDate = fmtKSTDateOnly(p.aos);
       const dateLabel = (i === 0 || prevDate !== thisDate) ? thisDate : '';
       const obsColor = p.observerColor || 'var(--text-dim)';
       const obsName = p.observerName || '—';
+      const satName = p.satName || '—';
+      const satColor = p.satColor || 'var(--amber)';
       return `
       <tr class="${classes.join(' ')}" data-pass-index="${i}" style="cursor:pointer;">
         <td class="num-cell" data-label="#">${pad(i+1)}</td>
+        <td data-label="Sat"><span class="obs-chip" style="background:${satColor};box-shadow:0 0 4px ${satColor};"></span><span class="obs-name-cell" style="color:${satColor};font-weight:500;">${satName}</span></td>
         <td data-label="Obs"><span class="obs-chip" style="background:${obsColor};box-shadow:0 0 4px ${obsColor};"></span><span class="obs-name-cell">${obsName}</span></td>
         <td data-label="Date" style="color:${dateLabel ? 'var(--cyan)' : 'var(--text-faint)'};font-weight:${dateLabel ? '500' : '300'}">${dateLabel || '〃'}</td>
         <td data-label="AOS KST"><span style="color:var(--amber);font-weight:500;">${fmtKSTTime(p.aos)}</span></td>
@@ -2060,9 +2439,12 @@ function renderPassTable(passes) {
       if (selected) classes.push('selected');
       const obsColor = p.observerColor || 'var(--text-dim)';
       const obsName = p.observerName || '—';
+      const satName = p.satName || '—';
+      const satColor = p.satColor || 'var(--amber)';
       return `
       <tr class="${classes.join(' ')}" data-pass-index="${i}" style="cursor:pointer;">
         <td class="num num-cell" data-label="Pass">#${pad(i+1)}${passing ? ' · LIVE' : ''}</td>
+        <td data-label="Satellite"><span class="obs-chip" style="background:${satColor};box-shadow:0 0 6px ${satColor};"></span><span class="obs-name-cell" style="color:${satColor};font-weight:500;">${satName}</span></td>
         <td data-label="Observer"><span class="obs-chip" style="background:${obsColor};box-shadow:0 0 6px ${obsColor};"></span><span class="obs-name-cell" style="color:${obsColor};font-weight:500;">${obsName}</span></td>
         <td data-label="AOS">${fmtDateTime(p.aos, false)}<div class="small kst-line">KST ${fmtKST(p.aos)}</div></td>
         <td data-label="AOS Az">${p.aosAz.toFixed(0)}° <span class="small">${compass(p.aosAz)}</span></td>
@@ -2132,11 +2514,35 @@ function renderAtTime(when, opts = {}) {
     visEl.className = 'data-value red';
   }
 
-  // map marker
+  // Primary target marker (large, in target color or amber)
+  const targetSat = state.mySats.find(s => s.norad && s.norad === state.target.norad);
+  const targetColor = targetSat ? targetSat.color : '#ffb627';
   if (state.satMarker) map.removeLayer(state.satMarker);
-  state.satMarker = L.marker([pos.lat, pos.lon], { icon: satIcon() })
+  state.satMarker = L.marker([pos.lat, pos.lon], { icon: satIcon(targetColor, false) })
     .addTo(map)
     .bindPopup(`${state.target.name}<br>${opts.isPreview ? fmtDateTime(when) : 'LIVE'}<br>Alt: ${pos.alt.toFixed(1)} km<br>Vel: ${pos.velocity.toFixed(2)} km/s`);
+
+  // Additional active satellite markers (smaller, color-coded)
+  // Remove old markers first
+  Object.values(state.allSatMarkers).forEach(m => map.removeLayer(m));
+  state.allSatMarkers = {};
+  for (const s of state.mySats) {
+    if (!s.active) continue;
+    if (!s.l1 || !s.l2) continue;
+    if (s.norad && state.target.norad && s.norad === state.target.norad) continue; // skip target
+    try {
+      const satrec = satellite.twoline2satrec(s.l1, s.l2);
+      if (satrec.error) continue;
+      const otherPos = getSatPosition(satrec, when, activeObserver);
+      if (!otherPos) continue;
+      const key = s.norad || s.name;
+      const popupText = `<b>${s.name}</b><br>Alt: ${otherPos.alt.toFixed(1)} km<br>El: ${otherPos.el.toFixed(1)}° from ${activeObserver.name}<br>${otherPos.el >= 0 ? '<span style="color:#00ff88;">VISIBLE</span>' : '<span style="color:#ff3860;">below horizon</span>'}`;
+      const marker = L.marker([otherPos.lat, otherPos.lon], { icon: satIcon(s.color || '#888', true) })
+        .addTo(map)
+        .bindPopup(popupText);
+      state.allSatMarkers[key] = marker;
+    } catch (_) { /* skip */ }
+  }
 
   // footprint
   if (state.rangeCircle) map.removeLayer(state.rangeCircle);
@@ -2221,6 +2627,10 @@ function exitPreview() {
 
 function renderPreviewAt(sliderValue) {
   if (!state.preview || !state.target) return;
+  if (state.preview.multiIndex !== undefined) {
+    renderMultiPreviewAt(sliderValue);
+    return;
+  }
   const pass = state.passes[state.preview.passIndex];
   const ratio = sliderValue / 1000;
   const t = pass.aos.getTime() + ratio * (pass.los.getTime() - pass.aos.getTime());
@@ -2228,6 +2638,149 @@ function renderPreviewAt(sliderValue) {
   state.preview.time = when;
   document.getElementById('preview-time').innerHTML = `${fmtDateTime(when, false).slice(11)} <span style="color:var(--amber);">/ KST ${fmtKSTTime(when)}</span>`;
   renderAtTime(when, { isPreview: true, pass });
+}
+
+// ============= MULTI-CONTACT PREVIEW =============
+function enterMultiPreview(idx) {
+  if (!state.multiContactEvents || !state.multiContactEvents[idx]) return;
+  const ev = state.multiContactEvents[idx];
+  // Pad the preview window slightly to show buildup / fadeout
+  const padMs = Math.max(60000, ev.duration * 0.3);
+  const windowStart = new Date(ev.startTime.getTime() - padMs);
+  const windowEnd = new Date(ev.endTime.getTime() + padMs);
+  state.preview = {
+    multiIndex: idx,
+    event: ev,
+    windowStart, windowEnd,
+    time: ev.startTime,
+  };
+
+  const bar = document.getElementById('preview-bar');
+  bar.style.display = 'flex';
+  document.getElementById('preview-num').textContent = `MULTI #${pad(idx + 1)} · ${ev.observerName} · ${ev.sats.length} sats`;
+  const slider = document.getElementById('preview-slider');
+  // Start at midpoint of multi-contact window
+  const midRatio = (ev.startTime.getTime() - windowStart.getTime() + ev.duration / 2) / (windowEnd.getTime() - windowStart.getTime());
+  slider.value = Math.round(midRatio * 1000);
+
+  // Draw the multi-contact track overlay
+  drawMultiContactTracks(ev);
+
+  document.getElementById('track-status').textContent = '◉ MULTI-PREVIEW';
+  renderPassTable(state.passes);
+  renderMultiPreviewAt(slider.value);
+
+  // On mobile, switch to passes tab
+  if (window.innerWidth <= 900 && window.showPane) {
+    const currentMode = document.body.getAttribute('data-tab-mode');
+    if (currentMode === 'catalog') window.showPane('passes');
+  }
+
+  // Center map on observer
+  const obs = findObserver(ev.observerId);
+  if (obs) {
+    map.setView([obs.lat, obs.lon], 3, { animate: true });
+  }
+}
+
+function renderMultiPreviewAt(sliderValue) {
+  if (!state.preview || state.preview.multiIndex === undefined) return;
+  const ev = state.preview.event;
+  const ws = state.preview.windowStart.getTime();
+  const we = state.preview.windowEnd.getTime();
+  const ratio = sliderValue / 1000;
+  const t = ws + ratio * (we - ws);
+  const when = new Date(t);
+  state.preview.time = when;
+
+  // Indicator if currently inside the multi-contact window
+  const insideMulti = t >= ev.startTime.getTime() && t <= ev.endTime.getTime();
+  const indicator = insideMulti
+    ? `<span style="color:var(--magenta);font-weight:700;">⧉ MULTI</span>`
+    : `<span style="color:var(--text-dim);">single</span>`;
+  document.getElementById('preview-time').innerHTML =
+    `${fmtDateTime(when, false).slice(11)} <span style="color:var(--amber);">/ KST ${fmtKSTTime(when)}</span> · ${indicator}`;
+
+  // Render all sat positions at this time, using observer from the event
+  const observer = findObserver(ev.observerId) || getPrimaryObserver();
+
+  // Update primary target telemetry to use the first multi-event sat as anchor
+  // and render all active satellites
+  renderAtTime(when, { isPreview: true, pass: { observerId: ev.observerId }, multiEvent: ev });
+}
+
+function drawMultiContactTracks(event) {
+  if (state.passTrackLayer) map.removeLayer(state.passTrackLayer);
+  const group = L.layerGroup();
+  // For each sat in this multi event, draw its track during the union window
+  const tStart = Math.min(...event.sats.map(s => s.aos.getTime()));
+  const tEnd = Math.max(...event.sats.map(s => s.los.getTime()));
+
+  for (const s of event.sats) {
+    const mySat = state.mySats.find(m => (m.norad && m.norad === s.norad) || m.name === s.name);
+    if (!mySat || !mySat.l1 || !mySat.l2) continue;
+    let satrec;
+    try {
+      satrec = satellite.twoline2satrec(mySat.l1, mySat.l2);
+      if (satrec.error) continue;
+    } catch (_) { continue; }
+
+    const color = s.color;
+    const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+    const coreColor = isDark ? '#ffffff' : color;
+    // Ground track from this sat's AOS to LOS
+    const segments = [];
+    let current = [];
+    let prevLon = null;
+    const stepMs = Math.max(2000, (s.los.getTime() - s.aos.getTime()) / 60);
+    for (let t = s.aos.getTime(); t <= s.los.getTime(); t += stepMs) {
+      const d = new Date(t);
+      const pv = satellite.propagate(satrec, d);
+      if (!pv.position) continue;
+      const geo = satellite.eciToGeodetic(pv.position, satellite.gstime(d));
+      const lat = deg(geo.latitude), lon = deg(geo.longitude);
+      if (prevLon !== null && Math.abs(lon - prevLon) > 180) {
+        segments.push(current); current = [];
+      }
+      current.push([lat, lon]);
+      prevLon = lon;
+    }
+    if (current.length) segments.push(current);
+
+    segments.forEach(seg => {
+      if (seg.length > 1) {
+        if (isDark) L.polyline(seg, { color, weight: 8, opacity: 0.18, lineCap: 'round' }).addTo(group);
+        L.polyline(seg, { color, weight: 4, opacity: 0.7, lineCap: 'round' }).addTo(group);
+        L.polyline(seg, { color: coreColor, weight: 1.5, opacity: 1, lineCap: 'round' }).addTo(group);
+      }
+    });
+
+    // Sat name label at AOS point
+    if (segments.length && segments[0].length) {
+      const startPos = segments[0][0];
+      const labelIcon = L.divIcon({
+        html: `<div style="background:rgba(0,0,0,0.75);color:${color};font-size:10px;padding:2px 6px;font-family:'JetBrains Mono',monospace;font-weight:600;border:1px solid ${color};box-shadow:0 0 6px ${color};border-radius:2px;white-space:nowrap;">${s.name}</div>`,
+        iconSize: [80, 16], iconAnchor: [-4, 8], className: '',
+      });
+      L.marker(startPos, { icon: labelIcon, interactive: false }).addTo(group);
+    }
+  }
+
+  // Highlight observer with a strong glow ring
+  const obs = findObserver(event.observerId);
+  if (obs) {
+    L.circle([obs.lat, obs.lon], {
+      radius: 50000,  // 50 km visual marker
+      color: event.observerColor,
+      weight: 3,
+      opacity: 0.8,
+      fillColor: event.observerColor,
+      fillOpacity: 0.15,
+    }).addTo(group);
+  }
+
+  group.addTo(map);
+  state.passTrackLayer = group;
 }
 
 function drawPassTrack(pass) {
@@ -2314,12 +2867,22 @@ document.getElementById('preview-slider').addEventListener('input', (e) => {
 });
 document.getElementById('preview-exit').addEventListener('click', exitPreview);
 
-// Pass display mode toggle (only the detail/compact buttons)
+// Pass display mode toggle (detail/compact/multi)
 document.querySelectorAll('.pass-mode-btn[data-pass-mode]').forEach(btn => {
   btn.classList.toggle('active', btn.dataset.passMode === passDisplayMode);
 
   btn.addEventListener('click', () => {
-    passDisplayMode = btn.dataset.passMode;
+    const newMode = btn.dataset.passMode;
+    // Exit preview when switching between fundamentally different modes
+    if (state.preview && newMode !== passDisplayMode) {
+      // If switching to/from multi, the preview type may change — exit cleanly
+      const wasMulti = state.preview.multiIndex !== undefined;
+      const isToMulti = newMode === 'multi';
+      if (wasMulti !== isToMulti) {
+        exitPreview();
+      }
+    }
+    passDisplayMode = newMode;
     document.querySelectorAll('.pass-mode-btn[data-pass-mode]').forEach(b => {
       b.classList.toggle('active', b.dataset.passMode === passDisplayMode);
     });
@@ -2329,7 +2892,7 @@ document.querySelectorAll('.pass-mode-btn[data-pass-mode]').forEach(btn => {
       if (isMobile) {
         body.style.maxHeight = '';
       } else {
-        body.style.maxHeight = passDisplayMode === 'compact' ? '60vh' : '320px';
+        body.style.maxHeight = (passDisplayMode === 'compact' || passDisplayMode === 'multi') ? '60vh' : '320px';
       }
     }
     renderPassTable(state.passes);
@@ -2499,13 +3062,24 @@ document.getElementById('range-reset').addEventListener('click', () => {
 // ============= CSV DOWNLOAD =============
 document.getElementById('csv-download-btn').addEventListener('click', () => {
   if (!state.passes || !state.passes.length) {
-    alert('No passes to export. Load a satellite first.');
+    alert('No passes to export. Activate at least one satellite first.');
     return;
   }
-  const csv = passesToCSV(state.passes, state.target ? state.target.name : 'Unknown');
-  const satName = (state.target ? state.target.name : 'satellite').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const csv = passesToCSV(state.passes);
+  const activeSats = getActiveSats();
+  let baseName;
+  if (activeSats.length === 1) {
+    baseName = activeSats[0].name;
+  } else if (activeSats.length > 1) {
+    baseName = `${activeSats.length}_satellites`;
+  } else if (state.target) {
+    baseName = state.target.name;
+  } else {
+    baseName = 'passes';
+  }
+  const safeName = baseName.replace(/[^a-zA-Z0-9_-]/g, '_');
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const filename = `passes_${satName}_${stamp}.csv`;
+  const filename = `passes_${safeName}_${stamp}.csv`;
   downloadFile(csv, filename, 'text/csv;charset=utf-8;');
 });
 
@@ -2518,12 +3092,18 @@ function csvEscape(s) {
   return str;
 }
 
-function passesToCSV(passes, satName) {
+function passesToCSV(passes) {
   const lines = [];
-  // Header metadata as comment-like rows (Excel-friendly)
-  lines.push(`# Satellite,${csvEscape(satName)}`);
-  if (state.target && state.target.norad) {
-    lines.push(`# NORAD ID,${csvEscape(state.target.norad)}`);
+  const activeSats = getActiveSats();
+  // Header metadata
+  if (activeSats.length === 1) {
+    lines.push(`# Satellite,${csvEscape(activeSats[0].name)}`);
+    if (activeSats[0].norad) lines.push(`# NORAD ID,${csvEscape(activeSats[0].norad)}`);
+  } else if (activeSats.length > 1) {
+    lines.push(`# Satellites,${csvEscape(activeSats.map(s => `${s.name} (${s.norad || 'manual'})`).join(' | '))}`);
+  } else if (state.target) {
+    lines.push(`# Satellite,${csvEscape(state.target.name)}`);
+    if (state.target.norad) lines.push(`# NORAD ID,${csvEscape(state.target.norad)}`);
   }
   if (state.passRange) {
     lines.push(`# Time Range,${csvEscape(state.passRange.startTime.toISOString())} to ${csvEscape(state.passRange.endTime.toISOString())}`);
@@ -2535,7 +3115,7 @@ function passesToCSV(passes, satName) {
   lines.push('');
   // Column headers
   lines.push([
-    '#', 'Observer', 'Observer Lat', 'Observer Lon', 'Observer Alt (m)',
+    '#', 'Satellite', 'NORAD ID', 'Observer', 'Observer Lat', 'Observer Lon', 'Observer Alt (m)',
     'AOS UTC', 'AOS KST', 'AOS Azimuth (°)', 'AOS Compass',
     'TCA UTC', 'TCA KST', 'Max Elevation (°)', 'TCA Azimuth (°)', 'TCA Compass',
     'LOS UTC', 'LOS KST', 'LOS Azimuth (°)', 'LOS Compass',
@@ -2551,6 +3131,8 @@ function passesToCSV(passes, satName) {
     const durMmSs = `${Math.floor(durSec / 60)}:${pad2(durSec % 60)}`;
     lines.push([
       i + 1,
+      p.satName || '',
+      p.satNorad || '',
       p.observerName || '',
       obs ? obs.lat.toFixed(6) : '',
       obs ? obs.lon.toFixed(6) : '',
@@ -2573,7 +3155,6 @@ function passesToCSV(passes, satName) {
     ].map(csvEscape).join(','));
   });
 
-  // Prepend UTF-8 BOM so Excel correctly detects encoding
   return '\uFEFF' + lines.join('\r\n');
 }
 
@@ -2754,17 +3335,68 @@ async function tryFetch(urls) {
   throw lastErr || new Error('All endpoints failed');
 }
 
-// Featured satellites (NORAD IDs) loaded by default
-const FEATURED_SATS = [
-  { name: 'NEONSAT-1',   norad: '59587' },
-  { name: 'NEONSAT-1A',  norad: '67614' },
-  { name: 'SPACEEYE-T1', norad: '63229' },
-  { name: 'ETIHAD-SAT',  norad: '63226' },
+// ============= MY SATELLITES (cached collection) =============
+const MY_SATS_KEY = 'orbital_my_satellites_v1';
+
+// Color palette for satellites (distinct hues, work in all themes)
+const SAT_COLORS = ['#ffb627', '#ff00d4', '#00ff88', '#88aaff', '#ffeb3b', '#ce93d8', '#ff8866', '#00e5ff'];
+
+// Default satellites for first-time users
+const DEFAULT_MY_SATS = [
+  { name: 'NEONSAT-1',   norad: '59587', active: true,  color: '#ffb627' },
+  { name: 'NEONSAT-1A',  norad: '67614', active: true,  color: '#ff00d4' },
+  { name: 'SPACEEYE-T1', norad: '63229', active: false, color: '#00ff88' },
+  { name: 'ETIHAD-SAT',  norad: '63226', active: false, color: '#88aaff' },
 ];
 
+function nextSatColor() {
+  const used = new Set((state.mySats || []).map(s => s.color).filter(Boolean));
+  for (const c of SAT_COLORS) if (!used.has(c)) return c;
+  return SAT_COLORS[(state.mySats || []).length % SAT_COLORS.length];
+}
+
+function loadMySatsFromStorage() {
+  try {
+    const raw = localStorage.getItem(MY_SATS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    const valid = parsed.filter(s =>
+      s && typeof s.name === 'string'
+        && (typeof s.norad === 'string' || (typeof s.l1 === 'string' && typeof s.l2 === 'string'))
+    );
+    // Backward compat: ensure active and color fields exist
+    valid.forEach((s, i) => {
+      if (typeof s.active !== 'boolean') s.active = true;
+      if (!s.color) s.color = SAT_COLORS[i % SAT_COLORS.length];
+    });
+    return valid;
+  } catch (e) {
+    console.warn('Failed to load my satellites:', e);
+    return null;
+  }
+}
+
+function saveMySatsToStorage() {
+  try {
+    localStorage.setItem(MY_SATS_KEY, JSON.stringify(state.mySats));
+  } catch (e) {
+    console.warn('Failed to save my satellites:', e);
+  }
+}
+
+// Add storage for my satellites to global state
+state.mySats = loadMySatsFromStorage() || DEFAULT_MY_SATS.map(s => ({ ...s }));
+
+function getActiveSats() {
+  return state.mySats.filter(s => s.active);
+}
+
+// Fetch TLE for one or more satellites by NORAD ID, returning hydrated entries with l1/l2
 async function fetchByNoradList(satList) {
   const results = [];
   await Promise.all(satList.map(async (s) => {
+    if (!s.norad) return;
     try {
       const base = `https://celestrak.org/NORAD/elements/gp.php?CATNR=${s.norad}&FORMAT=tle`;
       const text = await tryFetch([
@@ -2775,10 +3407,12 @@ async function fetchByNoradList(satList) {
       ]);
       if (/no gp data found/i.test(text) || text.trim().length < 50) return;
       const parsed = parseTLE(text);
-      if (parsed.length) results.push(parsed[0]);
-    } catch (_) { /* skip this one, continue with others */ }
+      if (parsed.length) {
+        results.push({ ...parsed[0], _requestedName: s.name });
+      }
+    } catch (_) { /* skip and continue */ }
   }));
-  // Preserve the order from FEATURED_SATS
+  // Preserve input order
   const sorted = [];
   for (const s of satList) {
     const found = results.find(r => r.norad === s.norad);
@@ -2787,30 +3421,446 @@ async function fetchByNoradList(satList) {
   return sorted;
 }
 
-async function fetchCelestrak(group) {
-  const status = document.getElementById('catalog-status');
-  status.className = 'note';
+// Render the "My Satellites" list - the user's saved collection
+function renderMySatList() {
+  const list = document.getElementById('my-sat-list');
+  if (!list) return;
+  const activeCount = state.mySats.filter(s => s.active).length;
+  document.getElementById('my-sat-count').textContent = `${activeCount}/${state.mySats.length} ACTIVE`;
 
-  // Special handling for the "preset" featured group — fetch by NORAD ID list
-  if (group === 'preset') {
-    status.textContent = `▸ Fetching featured satellites (NEONSAT, SPACEEYE, ETIHAD-SAT)...`;
-    try {
-      const sats = await fetchByNoradList(FEATURED_SATS);
-      if (!sats.length) throw new Error('Could not fetch any featured satellites');
-      state.catalog = sats;
-      renderCatalog(sats);
-      status.className = 'ok';
-      const missing = FEATURED_SATS.length - sats.length;
-      status.textContent = missing > 0
-        ? `✓ Loaded ${sats.length}/${FEATURED_SATS.length} featured satellites (${missing} unavailable).`
-        : `✓ Loaded ${sats.length} featured satellites.`;
-    } catch (e) {
-      status.className = 'error';
-      status.innerHTML = `✗ Fetch failed: ${e.message}.<br>Try a different group, paste a TLE manually, or use Auto-fetch by name.`;
-    }
+  if (!state.mySats.length) {
+    list.innerHTML = `<div class="note" style="padding:14px;text-align:center;">No satellites saved. Click "+ Add Satellite" to begin.</div>`;
     return;
   }
 
+  const currentNorad = state.target ? state.target.norad : null;
+  const currentName = state.target ? state.target.name : null;
+
+  list.innerHTML = state.mySats.map((s, idx) => {
+    const isTracking = (currentNorad && s.norad === currentNorad)
+      || (!s.norad && currentName === s.name);
+    const isActive = s.active;
+    const meta = s.norad ? `NORAD ${s.norad}` : 'Manual TLE';
+    const tleStatus = (s.l1 && s.l2)
+      ? `<span style="color:var(--green);" title="TLE cached">●</span>`
+      : `<span style="color:var(--text-faint);" title="No TLE cache yet">○</span>`;
+    const color = s.color || '#888';
+    const classes = ['my-sat-item'];
+    if (isTracking) classes.push('active');
+    if (!isActive) classes.push('inactive');
+    return `
+      <div class="${classes.join(' ')}" data-sat-idx="${idx}" style="border-left-color:${color};">
+        <input type="checkbox" class="observer-checkbox" data-action="toggle" ${isActive ? 'checked' : ''} title="Include in pass predictions">
+        <div class="my-sat-info" data-action="track">
+          <div class="my-sat-name">${tleStatus} <span class="sat-color-dot" style="background:${color};"></span>${s.name}</div>
+          <div class="my-sat-meta">${meta}</div>
+        </div>
+        <div class="my-sat-actions">
+          <button class="observer-btn" data-action="edit" title="Edit">✎</button>
+          <button class="observer-btn danger" data-action="delete" title="Delete">✕</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  list.querySelectorAll('.my-sat-item').forEach(item => {
+    const idx = parseInt(item.dataset.satIdx);
+    item.querySelector('[data-action="toggle"]').addEventListener('change', (e) => {
+      e.stopPropagation();
+      toggleSat(idx, e.target.checked);
+    });
+    item.querySelector('[data-action="track"]').addEventListener('click', () => trackMySat(idx));
+    item.querySelector('[data-action="edit"]').addEventListener('click', (e) => {
+      e.stopPropagation(); openSatEditor(idx);
+    });
+    item.querySelector('[data-action="delete"]').addEventListener('click', (e) => {
+      e.stopPropagation(); deleteMySat(idx);
+    });
+  });
+}
+
+function toggleSat(idx, active) {
+  const s = state.mySats[idx];
+  if (!s) return;
+  s.active = active;
+  saveMySatsToStorage();
+  renderMySatList();
+  // Ensure TLEs are cached for newly-activated sats so multi-sat predictions work
+  if (active && s.norad && !s.l1) {
+    ensureTLE(s).then(() => {
+      recomputePasses();
+      drawGroundTrack();
+    });
+  } else {
+    recomputePasses();
+    drawGroundTrack();
+  }
+}
+
+// Ensure a satellite has TLE data, fetching from CelesTrak if needed
+async function ensureTLE(sat) {
+  if (sat.l1 && sat.l2) return sat;
+  if (!sat.norad) return null;
+  try {
+    const fetched = await fetchByNoradList([{ name: sat.name, norad: sat.norad }]);
+    if (fetched.length) {
+      sat.l1 = fetched[0].l1;
+      sat.l2 = fetched[0].l2;
+      sat.name = fetched[0].name;
+      saveMySatsToStorage();
+    }
+  } catch (_) {}
+  return sat;
+}
+
+function getActiveSats() {
+  return state.mySats.filter(s => s.active && s.l1 && s.l2);
+}
+
+// Track a satellite from My Sats — fetch latest TLE if it has NORAD ID, else use saved TLE
+async function trackMySat(idx) {
+  const s = state.mySats[idx];
+  if (!s) return;
+  const status = document.getElementById('my-sat-status');
+  status.style.display = 'block';
+  status.className = 'note';
+
+  if (s.norad) {
+    // Try to fetch fresh TLE
+    status.textContent = `▸ Fetching latest TLE for ${s.name} (NORAD ${s.norad})...`;
+    try {
+      const fetched = await fetchByNoradList([{ name: s.name, norad: s.norad }]);
+      if (fetched.length) {
+        const t = fetched[0];
+        // Update cached TLE
+        s.l1 = t.l1;
+        s.l2 = t.l2;
+        saveMySatsToStorage();
+        setTarget(s.name, t.l1, t.l2, s.norad);
+        status.className = 'ok';
+        status.textContent = `✓ Tracking ${s.name} (TLE updated).`;
+        return;
+      }
+    } catch (_) {}
+    // Fetch failed — use cached if available
+    if (s.l1 && s.l2) {
+      setTarget(s.name, s.l1, s.l2, s.norad);
+      status.className = 'note';
+      status.innerHTML = `<span style="color:var(--amber);">⚠ Could not fetch latest TLE — using cached version.</span>`;
+      return;
+    }
+    status.className = 'error';
+    status.textContent = `✗ Could not fetch TLE for ${s.name} and no cache available.`;
+    return;
+  }
+
+  // No NORAD ID — manual TLE only
+  if (s.l1 && s.l2) {
+    setTarget(s.name, s.l1, s.l2, '');
+    status.className = 'ok';
+    status.textContent = `✓ Tracking ${s.name} (manual TLE).`;
+  } else {
+    status.className = 'error';
+    status.textContent = `✗ No TLE data for ${s.name}.`;
+  }
+}
+
+function deleteMySat(idx) {
+  const s = state.mySats[idx];
+  if (!s) return;
+  if (!confirm(`Delete "${s.name}" from your satellite list?`)) return;
+  state.mySats.splice(idx, 1);
+  saveMySatsToStorage();
+  renderMySatList();
+  recomputePasses();
+}
+
+// ============= SATELLITE EDITOR =============
+let editingSatIdx = null;  // null = adding new
+let satEditorMethod = 'auto';  // 'auto' or 'manual'
+
+function openSatEditor(idx) {
+  editingSatIdx = (typeof idx === 'number') ? idx : null;
+  const s = (idx !== null && idx !== undefined) ? state.mySats[idx] : null;
+  const editor = document.getElementById('sat-editor');
+  editor.style.display = '';
+  document.getElementById('sat-editor-title').textContent = s ? `▸ Edit: ${s.name}` : '▸ Add Satellite';
+
+  // If editing a manual-only sat, switch to manual tab
+  if (s && !s.norad && s.l1 && s.l2) {
+    setSatMethod('manual');
+    document.getElementById('sat-manual-name').value = s.name;
+    document.getElementById('sat-manual-l1').value = s.l1;
+    document.getElementById('sat-manual-l2').value = s.l2;
+  } else {
+    setSatMethod('auto');
+    document.getElementById('sat-query').value = s ? (s.norad || s.name) : '';
+    document.getElementById('sat-manual-name').value = '';
+    document.getElementById('sat-manual-l1').value = '';
+    document.getElementById('sat-manual-l2').value = '';
+  }
+
+  document.getElementById('sat-fetch-status').style.display = 'none';
+  editor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function closeSatEditor() {
+  editingSatIdx = null;
+  document.getElementById('sat-editor').style.display = 'none';
+}
+
+function setSatMethod(method) {
+  satEditorMethod = method;
+  document.querySelectorAll('[data-sat-method]').forEach(b => {
+    b.classList.toggle('active', b.dataset.satMethod === method);
+  });
+  document.getElementById('sat-method-auto').style.display = method === 'auto' ? '' : 'none';
+  document.getElementById('sat-method-manual').style.display = method === 'manual' ? '' : 'none';
+}
+
+async function fetchAndSaveSat() {
+  const query = document.getElementById('sat-query').value.trim();
+  const status = document.getElementById('sat-fetch-status');
+  status.style.display = 'block';
+  if (!query) {
+    status.className = 'error';
+    status.textContent = '✗ Enter a satellite name or NORAD ID.';
+    return;
+  }
+  status.className = 'note';
+  status.textContent = `▸ Searching CelesTrak for "${query}"...`;
+
+  const isNorad = /^\d+$/.test(query);
+  const baseUrl = isNorad
+    ? `https://celestrak.org/NORAD/elements/gp.php?CATNR=${query}&FORMAT=tle`
+    : `https://celestrak.org/NORAD/elements/gp.php?NAME=${encodeURIComponent(query)}&FORMAT=tle`;
+  const urls = [
+    baseUrl,
+    `https://corsproxy.io/?${encodeURIComponent(baseUrl)}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(baseUrl)}`,
+    `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(baseUrl)}`,
+  ];
+
+  try {
+    const text = await tryFetch(urls);
+    if (/no gp data found/i.test(text) || text.trim().length < 50) {
+      throw new Error('No matching satellite found.');
+    }
+    const results = parseTLE(text);
+    if (!results.length) throw new Error('Parsed 0 valid TLE entries.');
+
+    if (results.length === 1) {
+      const r = results[0];
+      saveSatToMyList({ name: r.name, norad: r.norad, l1: r.l1, l2: r.l2 });
+      status.className = 'ok';
+      status.textContent = `✓ Saved ${r.name} (NORAD ${r.norad}).`;
+      setTimeout(closeSatEditor, 600);
+    } else {
+      // Multiple matches — let user pick
+      status.className = 'ok';
+      status.innerHTML = `Found ${results.length} matches. Select one:`;
+      const listEl = document.createElement('div');
+      listEl.className = 'sat-list';
+      listEl.style.marginTop = '6px';
+      listEl.style.maxHeight = '200px';
+      const capped = results.slice(0, 100);
+      listEl.innerHTML = capped.map(r => `
+        <div class="sat-item-add" data-l1="${r.l1}" data-l2="${r.l2}" data-name="${cssEscape(r.name)}" data-norad="${r.norad}">
+          <div class="name">${r.name}</div>
+          <div class="id">${r.norad}</div>
+          <button class="add-btn" title="Save this satellite">⊕</button>
+        </div>`).join('');
+      status.appendChild(listEl);
+      listEl.querySelectorAll('.sat-item-add .add-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const row = btn.closest('.sat-item-add');
+          saveSatToMyList({
+            name: row.dataset.name,
+            norad: row.dataset.norad,
+            l1: row.dataset.l1,
+            l2: row.dataset.l2,
+          });
+          btn.textContent = '✓';
+          btn.classList.add('saved');
+        });
+      });
+    }
+  } catch (e) {
+    status.className = 'error';
+    status.innerHTML = `✗ ${e.message}<br><span style="color:var(--text-dim);font-size:10px;">Try a NORAD ID or paste TLE manually.</span>`;
+  }
+}
+
+function saveManualSat() {
+  const name = document.getElementById('sat-manual-name').value.trim() || 'Unnamed Satellite';
+  const l1 = document.getElementById('sat-manual-l1').value.trim();
+  const l2 = document.getElementById('sat-manual-l2').value.trim();
+  if (!l1 || !l2) {
+    alert('Both TLE lines are required.');
+    return;
+  }
+  // Validate by attempting to parse
+  try {
+    const test = satellite.twoline2satrec(l1, l2);
+    if (test.error) throw new Error(`SGP4 error: ${test.error}`);
+  } catch (e) {
+    alert(`Invalid TLE: ${e.message}`);
+    return;
+  }
+  saveSatToMyList({ name, norad: extractNorad(l1), l1, l2 });
+  closeSatEditor();
+}
+
+function saveSatToMyList(sat) {
+  // Default to active when adding new
+  if (typeof sat.active !== 'boolean') sat.active = true;
+  if (editingSatIdx !== null) {
+    // Preserve existing active state and color when editing
+    const prev = state.mySats[editingSatIdx];
+    if (prev) {
+      if (typeof prev.active === 'boolean') sat.active = prev.active;
+      if (prev.color && !sat.color) sat.color = prev.color;
+    }
+    state.mySats[editingSatIdx] = sat;
+  } else {
+    // Check for duplicate by NORAD ID
+    if (sat.norad) {
+      const existingIdx = state.mySats.findIndex(s => s.norad === sat.norad);
+      if (existingIdx >= 0) {
+        // Preserve active state and color
+        const prev = state.mySats[existingIdx];
+        if (prev) {
+          if (typeof prev.active === 'boolean') sat.active = prev.active;
+          if (prev.color && !sat.color) sat.color = prev.color;
+        }
+        state.mySats[existingIdx] = sat;
+        saveMySatsToStorage();
+        renderMySatList();
+        recomputePasses();
+        return;
+      }
+    }
+    // New satellite - assign next available color
+    if (!sat.color) sat.color = nextSatColor();
+    state.mySats.push(sat);
+  }
+  saveMySatsToStorage();
+  renderMySatList();
+  recomputePasses();
+}
+
+// ============= REFRESH TLES (re-fetch all NORAD-based sats) =============
+async function refreshAllTLEs() {
+  const status = document.getElementById('my-sat-status');
+  status.style.display = 'block';
+  status.className = 'note';
+  const withNorad = state.mySats.filter(s => s.norad);
+  if (!withNorad.length) {
+    status.className = 'note';
+    status.textContent = 'No NORAD-based satellites to refresh.';
+    return;
+  }
+  status.textContent = `▸ Refreshing ${withNorad.length} TLEs from CelesTrak...`;
+  try {
+    const fetched = await fetchByNoradList(withNorad);
+    let updated = 0;
+    for (const f of fetched) {
+      const s = state.mySats.find(x => x.norad === f.norad);
+      if (s) { s.l1 = f.l1; s.l2 = f.l2; s.name = f.name; updated++; }
+    }
+    saveMySatsToStorage();
+    renderMySatList();
+    status.className = 'ok';
+    status.textContent = `✓ Updated ${updated}/${withNorad.length} TLEs.`;
+    // Recompute passes with refreshed TLEs
+    recomputePasses();
+    // If currently tracking a refreshed satellite, re-set with new TLE
+    if (state.target && state.target.norad) {
+      const refreshed = state.mySats.find(s => s.norad === state.target.norad);
+      if (refreshed && refreshed.l1) {
+        setTarget(refreshed.name, refreshed.l1, refreshed.l2, refreshed.norad);
+      }
+    }
+  } catch (e) {
+    status.className = 'error';
+    status.textContent = `✗ Refresh failed: ${e.message}`;
+  }
+}
+
+// ============= EVENT BINDINGS =============
+document.getElementById('add-sat-btn').addEventListener('click', () => openSatEditor(null));
+document.getElementById('sat-editor-close').addEventListener('click', closeSatEditor);
+document.getElementById('sat-fetch-btn').addEventListener('click', fetchAndSaveSat);
+document.getElementById('sat-save-manual').addEventListener('click', saveManualSat);
+document.getElementById('sat-query').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); fetchAndSaveSat(); }
+});
+document.querySelectorAll('[data-sat-method]').forEach(btn => {
+  btn.addEventListener('click', () => setSatMethod(btn.dataset.satMethod));
+});
+document.getElementById('refresh-tles-btn').addEventListener('click', refreshAllTLEs);
+document.getElementById('reset-sats-btn').addEventListener('click', () => {
+  if (!confirm('Reset to default satellites (NEONSAT-1, NEONSAT-1A, SPACEEYE-T1, ETIHAD-SAT)? Your custom additions will be removed.')) return;
+  state.mySats = DEFAULT_MY_SATS.map(s => ({ ...s }));
+  saveMySatsToStorage();
+  renderMySatList();
+  document.getElementById('my-sat-status').style.display = 'none';
+  autoLoadActiveSats();
+});
+
+// Browse CelesTrak panel toggle
+document.getElementById('browse-toggle').addEventListener('click', () => {
+  const body = document.getElementById('browse-body');
+  const expanded = body.style.display !== 'none';
+  body.style.display = expanded ? 'none' : '';
+  document.getElementById('browse-toggle').textContent = expanded ? '▸ Browse CelesTrak' : '▾ Browse CelesTrak';
+});
+
+// Render the My Sats list initially
+renderMySatList();
+
+// Auto-load: fetch TLEs for all active satellites and start multi-sat tracking
+async function autoLoadActiveSats() {
+  const activeWithNorad = state.mySats.filter(s => s.active && s.norad && !s.l1);
+  const status = document.getElementById('my-sat-status');
+
+  if (activeWithNorad.length > 0) {
+    status.style.display = 'block';
+    status.className = 'note';
+    status.textContent = `▸ Fetching TLEs for ${activeWithNorad.length} active satellites...`;
+    try {
+      const fetched = await fetchByNoradList(activeWithNorad);
+      for (const f of fetched) {
+        const s = state.mySats.find(x => x.norad === f.norad);
+        if (s) { s.l1 = f.l1; s.l2 = f.l2; s.name = f.name; }
+      }
+      saveMySatsToStorage();
+      renderMySatList();
+      status.className = 'ok';
+      status.textContent = `✓ Loaded TLEs for ${fetched.length}/${activeWithNorad.length} satellites.`;
+      setTimeout(() => { status.style.display = 'none'; }, 3000);
+    } catch (e) {
+      status.className = 'error';
+      status.textContent = `✗ TLE fetch failed: ${e.message}`;
+    }
+  }
+
+  // Set the first active satellite as the primary target (for telemetry display)
+  const firstActive = state.mySats.find(s => s.active && s.l1 && s.l2);
+  if (firstActive) {
+    setTarget(firstActive.name, firstActive.l1, firstActive.l2, firstActive.norad);
+  } else {
+    // No active sat with TLE — recompute (probably empty)
+    recomputePasses();
+  }
+}
+
+if (state.mySats.length) {
+  setTimeout(autoLoadActiveSats, 200);
+}
+
+async function fetchCelestrak(group) {
+  const status = document.getElementById('catalog-status');
+  status.className = 'note';
   status.textContent = `▸ Fetching ${group} catalog from CelesTrak...`;
   try {
     const direct = `https://celestrak.org/NORAD/elements/gp.php?GROUP=${encodeURIComponent(group)}&FORMAT=tle`;
@@ -2836,11 +3886,10 @@ async function fetchCelestrak(group) {
     state.catalog = sats;
     renderCatalog(sats);
     status.className = 'ok';
-    status.textContent = `✓ Loaded ${sats.length} satellites from group "${group}".`;
+    status.textContent = `✓ Loaded ${sats.length} satellites from "${group}". Click ⊕ to add to your list.`;
   } catch (e) {
     status.className = 'error';
-    status.innerHTML = `✗ Fetch failed: ${e.message}.<br>Loading built-in sample (ISS) instead. You can also paste a TLE manually.`;
-    loadFallbackSamples();
+    status.innerHTML = `✗ Fetch failed: ${e.message}.`;
   }
 }
 
@@ -2882,15 +3931,44 @@ function loadFallbackSamples() {
 function renderCatalog(sats) {
   const list = document.getElementById('sat-list');
   list.style.display = 'block';
-  list.innerHTML = sats.map(s =>
-    `<div class="sat-item" data-name="${cssEscape(s.name)}" data-l1="${s.l1}" data-l2="${s.l2}" data-norad="${s.norad}">
-      <span class="name">${s.name}</span>
-      <span class="id">${s.norad}</span>
+  list.innerHTML = sats.map((s, i) =>
+    `<div class="sat-item-add" data-cat-idx="${i}">
+      <div style="display:flex;flex-direction:column;flex:1;min-width:0;">
+        <span class="name">${s.name}</span>
+        <span class="id">NORAD ${s.norad}</span>
+      </div>
+      <button class="add-btn" title="Save to My Satellites">⊕</button>
     </div>`
   ).join('');
-  list.querySelectorAll('.sat-item').forEach(el => {
-    el.addEventListener('click', () => {
-      setTarget(el.dataset.name, el.dataset.l1, el.dataset.l2, el.dataset.norad);
+
+  // Mark already-saved sats
+  list.querySelectorAll('.sat-item-add').forEach((el, i) => {
+    const s = sats[i];
+    const alreadySaved = state.mySats.some(m => m.norad && m.norad === s.norad);
+    if (alreadySaved) {
+      const btn = el.querySelector('.add-btn');
+      btn.textContent = '✓';
+      btn.classList.add('saved');
+      btn.title = 'Already in My Satellites';
+    }
+  });
+
+  list.querySelectorAll('.sat-item-add').forEach((el, i) => {
+    const s = sats[i];
+    const addBtn = el.querySelector('.add-btn');
+    // Add button → save to my list
+    addBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (addBtn.classList.contains('saved')) return;
+      saveSatToMyList({ name: s.name, norad: s.norad, l1: s.l1, l2: s.l2 });
+      addBtn.textContent = '✓';
+      addBtn.classList.add('saved');
+      addBtn.title = 'Already in My Satellites';
+    });
+    // Click row → quick track without saving
+    el.addEventListener('click', (e) => {
+      if (e.target.classList.contains('add-btn')) return;
+      setTarget(s.name, s.l1, s.l2, s.norad);
     });
   });
 }
@@ -2899,118 +3977,6 @@ function renderCatalog(sats) {
 document.getElementById('load-celestrak').addEventListener('click', () => {
   fetchCelestrak(document.getElementById('celestrak-group').value);
 });
-
-document.getElementById('load-tle').addEventListener('click', () => {
-  const name = document.getElementById('tle-name').value.trim() || 'UNNAMED SAT';
-  const l1 = document.getElementById('tle-l1').value.trim();
-  const l2 = document.getElementById('tle-l2').value.trim();
-  if (!l1 || !l2) {
-    showError('Both TLE lines required. Use Auto-fetch to populate by name.');
-    return;
-  }
-  setTarget(name, l1, l2);
-});
-
-// ============= AUTO-FETCH TLE BY NAME OR NORAD ID =============
-document.getElementById('auto-fetch-tle').addEventListener('click', autoFetchTLE);
-document.getElementById('tle-name').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); autoFetchTLE(); }
-});
-
-// Search across multiple CelesTrak groups when name search fails
-const SEARCH_GROUPS = [
-  'stations', 'active', 'visual', 'weather', 'noaa', 'goes',
-  'gps-ops', 'galileo', 'glo-ops', 'beidou', 'starlink', 'oneweb',
-  'amateur', 'cubesat', 'science', 'geo', 'iridium', 'iridium-NEXT',
-  'planet', 'spire', 'last-30-days', 'tle-new'
-];
-
-async function autoFetchTLE() {
-  const query = document.getElementById('tle-name').value.trim();
-  const statusEl = document.getElementById('auto-fetch-status');
-  statusEl.style.display = 'block';
-
-  if (!query) {
-    statusEl.className = 'error';
-    statusEl.textContent = '✗ Enter a satellite name or NORAD ID.';
-    return;
-  }
-
-  const isNorad = /^\d+$/.test(query);
-  const qUpper = query.toUpperCase();
-
-  // STEP 1: Search the currently loaded catalog first (instant, offline-capable)
-  if (state.catalog && state.catalog.length) {
-    const localMatches = state.catalog.filter(s =>
-      isNorad ? s.norad === query : s.name.toUpperCase().includes(qUpper)
-    );
-    if (localMatches.length) {
-      statusEl.className = 'ok';
-      statusEl.textContent = `✓ Found ${localMatches.length} match(es) in loaded catalog (no network needed).`;
-      if (localMatches.length === 1) {
-        const r = localMatches[0];
-        document.getElementById('tle-name').value = r.name;
-        document.getElementById('tle-l1').value = r.l1;
-        document.getElementById('tle-l2').value = r.l2;
-        setTarget(r.name, r.l1, r.l2, r.norad);
-      } else {
-        showSearchResults(localMatches, statusEl);
-      }
-      return;
-    }
-  }
-
-  // STEP 2: Try CelesTrak via multiple endpoints
-  statusEl.className = 'note';
-  statusEl.textContent = `▸ Searching CelesTrak online for "${query}"...`;
-
-  const baseUrl = isNorad
-    ? `https://celestrak.org/NORAD/elements/gp.php?CATNR=${query}&FORMAT=tle`
-    : `https://celestrak.org/NORAD/elements/gp.php?NAME=${encodeURIComponent(query)}&FORMAT=tle`;
-
-  const urls = [
-    baseUrl,
-    `https://corsproxy.io/?${encodeURIComponent(baseUrl)}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(baseUrl)}`,
-    `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(baseUrl)}`,
-    `https://proxy.cors.sh/${baseUrl}`,
-    `https://cors-anywhere.herokuapp.com/${baseUrl}`,
-    `https://thingproxy.freeboard.io/fetch/${baseUrl}`,
-  ];
-
-  try {
-    const text = await tryFetch(urls);
-    if (/no gp data found/i.test(text) || text.trim().length < 50) {
-      throw new Error('No matching satellite on CelesTrak.');
-    }
-    const results = parseTLE(text);
-    if (!results.length) throw new Error('Parsed 0 valid TLE entries.');
-    handleSearchResults(results, statusEl);
-    return;
-  } catch (e) {
-    // STEP 3: Fall back to searching across pre-loaded popular groups
-    statusEl.className = 'note';
-    statusEl.textContent = `▸ Online search failed. Scanning popular catalogs for "${query}"...`;
-    try {
-      const found = await searchAcrossGroups(query, isNorad, qUpper);
-      if (found.length) {
-        statusEl.className = 'ok';
-        statusEl.textContent = `✓ Found ${found.length} match(es) by scanning catalogs.`;
-        handleSearchResults(found, statusEl);
-        return;
-      }
-      throw new Error('Not found in any reachable catalog.');
-    } catch (e2) {
-      statusEl.className = 'error';
-      statusEl.innerHTML = `✗ ${e2.message}<br>
-        <span style="color:var(--text-dim);font-size:10px;line-height:1.5;display:block;margin-top:6px;">
-          • Try loading a catalog group first (left panel) — then search within it.<br>
-          • Or visit <span style="color:var(--cyan);">celestrak.org</span> and paste the TLE manually.<br>
-          • Network may be blocking external requests entirely.
-        </span>`;
-    }
-  }
-}
 
 function parseTLE(text) {
   const lines = text.trim().split(/\r?\n/);
@@ -3023,82 +3989,6 @@ function parseTLE(text) {
     results.push({ name, l1, l2, norad: extractNorad(l1) });
   }
   return results;
-}
-
-async function searchAcrossGroups(query, isNorad, qUpper) {
-  const allFound = [];
-  const seen = new Set();
-  for (const group of SEARCH_GROUPS) {
-    try {
-      const url = `https://celestrak.org/NORAD/elements/gp.php?GROUP=${group}&FORMAT=tle`;
-      const text = await tryFetch([
-        url,
-        `https://corsproxy.io/?${encodeURIComponent(url)}`,
-        `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-      ]);
-      const parsed = parseTLE(text);
-      for (const s of parsed) {
-        if (seen.has(s.norad)) continue;
-        const hit = isNorad ? s.norad === query : s.name.toUpperCase().includes(qUpper);
-        if (hit) {
-          allFound.push(s);
-          seen.add(s.norad);
-          if (allFound.length >= 50) return allFound;
-        }
-      }
-    } catch (_) { /* try next group */ }
-  }
-  return allFound;
-}
-
-function handleSearchResults(results, statusEl) {
-  if (results.length === 1) {
-    const r = results[0];
-    document.getElementById('tle-name').value = r.name;
-    document.getElementById('tle-l1').value = r.l1;
-    document.getElementById('tle-l2').value = r.l2;
-    statusEl.className = 'ok';
-    statusEl.textContent = `✓ Found: ${r.name} (NORAD ${r.norad}). Tracking now.`;
-    setTarget(r.name, r.l1, r.l2, r.norad);
-  } else {
-    statusEl.className = 'ok';
-    statusEl.innerHTML = `✓ Found ${results.length} matches. Select one:`;
-    showSearchResults(results, statusEl);
-  }
-}
-
-function showSearchResults(results, statusEl) {
-  // Cap display to avoid massive lists (e.g. "STARLINK" matches thousands)
-  const capped = results.slice(0, 100);
-  const note = results.length > 100
-    ? `<div style="color:var(--amber);font-size:10px;padding:4px 0;">Showing first 100 of ${results.length}. Refine your search for more.</div>`
-    : '';
-  const listHtml = `
-    ${note}
-    <div class="sat-list" style="margin-top:6px;max-height:200px;">
-      ${capped.map(r => `
-        <div class="sat-item search-result"
-             data-name="${cssEscape(r.name)}"
-             data-l1="${r.l1}"
-             data-l2="${r.l2}"
-             data-norad="${r.norad}">
-          <span class="name">${r.name}</span>
-          <span class="id">${r.norad}</span>
-        </div>
-      `).join('')}
-    </div>`;
-  statusEl.innerHTML = `✓ Found ${results.length} matches. Select one:` + listHtml;
-
-  statusEl.querySelectorAll('.search-result').forEach(el => {
-    el.addEventListener('click', () => {
-      document.getElementById('tle-name').value = el.dataset.name;
-      document.getElementById('tle-l1').value = el.dataset.l1;
-      document.getElementById('tle-l2').value = el.dataset.l2;
-      setTarget(el.dataset.name, el.dataset.l1, el.dataset.l2, el.dataset.norad);
-      statusEl.className = 'ok';
-      statusEl.textContent = `✓ Tracking ${el.dataset.name} (NORAD ${el.dataset.norad}).`;
-    });
-  });
 }
 
 // ============= OBSERVER MANAGEMENT =============
@@ -3251,11 +4141,39 @@ function saveObserverFromEditor() {
 }
 
 function recomputePasses() {
-  if (!state.target) return;
-  state.passes = predictAllPasses(state.target.satrec, getPassPredictionOptions(), 0);
-  renderPassTable(state.passes);
-  document.getElementById('pass-count').textContent = `${state.passes.length} PASSES · ${getActiveObservers().length} OBS`;
-  updatePassPanelTitle();
+  const activeSats = getActiveSats();
+  if (activeSats.length > 0) {
+    state.passes = predictAllSatPasses(getPassPredictionOptions(), 0);
+    renderPassTable(state.passes);
+    if (passDisplayMode === 'multi') {
+      const events = state.multiContactEvents || [];
+      document.getElementById('pass-count').textContent =
+        `${events.length} MULTI · ${activeSats.length} SATS · ${getActiveObservers().length} OBS`;
+    } else {
+      document.getElementById('pass-count').textContent =
+        `${state.passes.length} PASSES · ${activeSats.length} SATS · ${getActiveObservers().length} OBS`;
+    }
+    updatePassPanelTitle();
+    return;
+  }
+  if (state.target) {
+    state.passes = predictAllPasses(state.target.satrec, getPassPredictionOptions(), 0);
+    const targetSat = state.mySats.find(s => s.norad && s.norad === state.target.norad);
+    const targetColor = targetSat ? targetSat.color : '#ffb627';
+    state.passes.forEach(p => {
+      p.satName = state.target.name;
+      p.satNorad = state.target.norad || '';
+      p.satColor = targetColor;
+    });
+    renderPassTable(state.passes);
+    document.getElementById('pass-count').textContent =
+      `${state.passes.length} PASSES · ${getActiveObservers().length} OBS`;
+    updatePassPanelTitle();
+    return;
+  }
+  state.passes = [];
+  renderPassTable([]);
+  document.getElementById('pass-count').textContent = `0 PASSES`;
 }
 
 document.getElementById('add-observer-btn').addEventListener('click', () => openObserverEditor(null));
@@ -3295,8 +4213,8 @@ function showError(msg) {
   status.textContent = `✗ ${msg}`;
 }
 
-// ============= AUTO-LOAD FEATURED SATELLITES =============
-fetchCelestrak('preset');
+// ============= AUTO-LOAD =============
+// My Satellites loads automatically via trackMySat(0) above.
 
 } // end initApp
 
