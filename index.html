@@ -1,0 +1,3307 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORBITAL · Satellite Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700;800&family=Major+Mono+Display&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  /* ============= THEMES ============= */
+  /* DARK (default) — mission control */
+  :root, [data-theme="dark"] {
+    --bg: #07090d;
+    --bg-2: #0c1015;
+    --panel: #10151c;
+    --panel-2: #161c25;
+    --border: #1e2733;
+    --border-bright: #2a3645;
+    --text: #c8d3df;
+    --text-dim: #8a96a7;
+    --text-faint: #525d6b;
+    --cyan: #00e5ff;
+    --cyan-dim: #008a99;
+    --amber: #ffb627;
+    --amber-dim: #8a6014;
+    --green: #00ff88;
+    --red: #ff3860;
+    --magenta: #ff00d4;
+    --glow-cyan: 0 0 12px rgba(0, 229, 255, 0.4);
+    --glow-amber: 0 0 12px rgba(255, 182, 39, 0.4);
+    --map-filter: hue-rotate(180deg) invert(1) brightness(0.85) contrast(1.1);
+    --scanline-opacity: 0.012;
+  }
+
+  /* DAYLIGHT — clean light theme, navy on cream */
+  [data-theme="light"] {
+    --bg: #f5f2ea;
+    --bg-2: #ebe6d8;
+    --panel: #ffffff;
+    --panel-2: #f9f5ea;
+    --border: #d6cebb;
+    --border-bright: #b8ad94;
+    --text: #1a2433;
+    --text-dim: #5a6678;
+    --text-faint: #8a94a4;
+    --cyan: #0066b3;
+    --cyan-dim: #88b8d9;
+    --amber: #c8500a;
+    --amber-dim: #e9b894;
+    --green: #2d8050;
+    --red: #c41e3a;
+    --magenta: #a8217a;
+    --glow-cyan: 0 0 0 rgba(0,0,0,0);
+    --glow-amber: 0 0 0 rgba(0,0,0,0);
+    --map-filter: none;
+    --scanline-opacity: 0;
+  }
+
+  /* PHOSPHOR — vintage green CRT terminal */
+  [data-theme="phosphor"] {
+    --bg: #021008;
+    --bg-2: #03180c;
+    --panel: #042010;
+    --panel-2: #062818;
+    --border: #0d3e22;
+    --border-bright: #155a35;
+    --text: #88ffaa;
+    --text-dim: #4dbb7a;
+    --text-faint: #297a4a;
+    --cyan: #88ffd0;
+    --cyan-dim: #2d8a60;
+    --amber: #ffe066;
+    --amber-dim: #8a7820;
+    --green: #00ff66;
+    --red: #ff8866;
+    --magenta: #ff88dd;
+    --glow-cyan: 0 0 14px rgba(136, 255, 208, 0.6);
+    --glow-amber: 0 0 14px rgba(255, 224, 102, 0.6);
+    --map-filter: hue-rotate(80deg) invert(1) brightness(0.6) contrast(1.3) saturate(1.5);
+    --scanline-opacity: 0.04;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+  /* CRT scanline overlay - theme controlled */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent 0,
+      transparent 2px,
+      rgba(0, 229, 255, var(--scanline-opacity)) 3px,
+      transparent 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.4) 100%);
+    pointer-events: none;
+    z-index: 9998;
+    opacity: var(--scanline-opacity);
+  }
+  [data-theme="light"] body::after { display: none; }
+
+  /* Header */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-2);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .logo {
+    font-family: 'Major Mono Display', monospace;
+    font-size: 22px;
+    letter-spacing: 0.15em;
+    color: var(--cyan);
+    text-shadow: var(--glow-cyan);
+  }
+  .logo .sub {
+    color: var(--text-dim);
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    margin-left: 12px;
+  }
+  .status-bar {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .status-item { color: var(--text-dim); }
+  .status-item .val { color: var(--cyan); margin-left: 8px; }
+  .status-item .val.amber { color: var(--amber); }
+  .dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    margin-right: 6px;
+    animation: pulse 1.6s infinite;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  /* Layout */
+  .container {
+    display: grid;
+    grid-template-columns: 340px 1fr 340px;
+    grid-template-rows: 1fr auto;
+    gap: 1px;
+    background: var(--border);
+    min-height: calc(100vh - 60px);
+  }
+  .col { background: var(--bg); padding: 18px; overflow-y: auto; }
+  .col.center { padding: 0; display: flex; flex-direction: column; }
+  .passes-wrap {
+    grid-column: 1 / -1;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+  }
+
+  /* Panel */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    margin-bottom: 14px;
+    position: relative;
+  }
+  .panel-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--panel-2);
+  }
+  .panel-title {
+    font-size: 10px;
+    letter-spacing: 0.25em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+  .panel-title::before {
+    content: '▸ ';
+    color: var(--cyan);
+  }
+  .panel-body { padding: 14px; }
+
+  /* Form */
+  label {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    margin-top: 10px;
+  }
+  label:first-child { margin-top: 0; }
+  input, textarea, select {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border-bright);
+    color: var(--text);
+    padding: 8px 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input:focus, textarea:focus, select:focus {
+    border-color: var(--cyan);
+    box-shadow: 0 0 0 1px var(--cyan-dim);
+  }
+  textarea {
+    resize: vertical;
+    min-height: 90px;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .btn {
+    background: transparent;
+    border: 1px solid var(--cyan-dim);
+    color: var(--cyan);
+    padding: 9px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s;
+    width: 100%;
+    margin-top: 12px;
+  }
+  .btn:hover {
+    background: var(--cyan-dim);
+    color: var(--bg);
+    box-shadow: 0 0 16px rgba(0, 229, 255, 0.4);
+  }
+  .btn.amber { border-color: var(--amber-dim); color: var(--amber); }
+  .btn.amber:hover { background: var(--amber-dim); color: var(--bg); box-shadow: 0 0 16px rgba(255, 182, 39, 0.4); }
+  .btn.ghost { border-color: var(--border-bright); color: var(--text-dim); }
+  .btn.ghost:hover { background: var(--panel-2); color: var(--text); box-shadow: none; }
+  .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  /* Satellite list */
+  .sat-list {
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid var(--border-bright);
+    background: var(--bg);
+  }
+  .sat-item {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    font-size: 11px;
+    display: flex;
+    justify-content: space-between;
+    transition: background 0.1s;
+  }
+  .sat-item:hover { background: var(--panel-2); }
+  .sat-item.active { background: rgba(0, 229, 255, 0.08); border-left: 2px solid var(--cyan); }
+  .sat-item .name { color: var(--text); }
+  .sat-item .id { color: var(--text-faint); font-size: 10px; }
+
+  /* Live data */
+  .data-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+  }
+  .data-cell {
+    background: var(--panel);
+    padding: 12px;
+  }
+  .data-label {
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .data-value {
+    font-size: 18px;
+    color: var(--cyan);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+  .data-value.amber { color: var(--amber); }
+  .data-value.green { color: var(--green); }
+  .data-value.red { color: var(--red); }
+  .data-value .unit { font-size: 11px; color: var(--text-dim); margin-left: 4px; }
+
+  /* Map */
+  #map {
+    flex: 1;
+    background: #050709;
+    min-height: 400px;
+  }
+  /* Apply dark filter only to the tile layer, not overlays */
+  .leaflet-tile-pane {
+    filter: var(--map-filter);
+  }
+  .leaflet-container { background: var(--bg-2); }
+
+  /* Map legend */
+  .map-legend {
+    position: absolute;
+    bottom: 40px;
+    left: 12px;
+    background: rgba(7, 9, 13, 0.92);
+    border: 1px solid var(--border-bright);
+    padding: 10px 12px;
+    z-index: 500;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    backdrop-filter: blur(4px);
+    color: var(--text-dim);
+  }
+  .legend-title {
+    color: var(--cyan);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  .legend-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 0;
+  }
+  .legend-swatch {
+    width: 22px;
+    height: 3px;
+    flex-shrink: 0;
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .leaflet-control-attribution {
+    background: rgba(0,0,0,0.7) !important;
+    color: #888 !important;
+    font-size: 9px !important;
+  }
+  .leaflet-control-attribution a { color: #aaa !important; }
+
+  /* Sky view */
+  .skyview-wrap {
+    background: var(--panel);
+    padding: 14px;
+    position: relative;
+  }
+  #skyview { width: 100%; height: auto; display: block; }
+
+  /* Pass table */
+  .pass-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  .pass-table th {
+    text-align: left;
+    padding: 8px 10px;
+    background: var(--panel-2);
+    color: var(--text-dim);
+    font-weight: 400;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    font-size: 9px;
+    border-bottom: 1px solid var(--border);
+  }
+  .pass-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+  .pass-table tr.active td { background: rgba(0, 229, 255, 0.06); }
+  .pass-table tr.passing td { background: rgba(0, 255, 136, 0.08); color: var(--green); }
+  .pass-table tr.selected td {
+    background: rgba(255, 182, 39, 0.12) !important;
+    box-shadow: inset 3px 0 0 var(--amber);
+  }
+  .pass-table tbody tr:hover td { background: rgba(255, 255, 255, 0.03); }
+  .pass-table .num { color: var(--amber); }
+  .pass-table .small { color: var(--text-dim); font-size: 10px; }
+  .pass-table .small.kst-line { color: var(--amber); opacity: 0.75; }
+  .pass-table .small .kst-line { color: var(--amber); opacity: 0.75; }
+
+  /* Pass mode toggle */
+  .pass-mode-toggle {
+    display: flex;
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border-bright);
+  }
+  .range-mode-toggle {
+    display: flex;
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border-bright);
+  }
+  .range-mode-toggle .pass-mode-btn {
+    padding: 4px 10px;
+    font-size: 9px;
+  }
+  .pass-header-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-left: auto;
+    flex-wrap: wrap;
+  }
+  .time-range-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .quick-range-btns {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .quick-range-btns .pass-mode-btn {
+    flex: 1;
+    min-width: 90px;
+    text-align: center;
+  }
+  input[type="datetime-local"] {
+    font-family: 'JetBrains Mono', monospace;
+    color-scheme: dark light;
+  }
+  .pass-mode-btn {
+    background: var(--panel);
+    border: none;
+    color: var(--text-dim);
+    padding: 5px 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .pass-mode-btn:hover { color: var(--text); }
+  .pass-mode-btn.active {
+    background: var(--cyan);
+    color: var(--bg);
+    box-shadow: var(--glow-cyan);
+  }
+
+  /* Compact mode: tighter rows, smaller padding, single line */
+  .pass-table.compact td { padding: 6px 10px; font-size: 11px; }
+  .pass-table.compact .small { display: none; }
+  .pass-table.compact tr td:first-child { color: var(--amber); font-weight: 500; }
+
+  /* Loading / notes */
+  .note {
+    color: var(--text-dim);
+    font-size: 10px;
+    padding: 8px 0;
+    font-style: italic;
+  }
+  .error {
+    color: var(--red);
+    font-size: 10px;
+    padding: 6px 0;
+  }
+  .ok {
+    color: var(--green);
+    font-size: 10px;
+    padding: 6px 0;
+  }
+
+  /* Coordinates panel */
+  .coord-display {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    padding: 6px 0;
+  }
+  .coord-display strong { color: var(--cyan); font-weight: 500; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border-bright); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--cyan-dim); }
+
+  /* Footer bar */
+  .footer-bar {
+    border-top: 1px solid var(--border);
+    background: var(--bg-2);
+    padding: 8px 18px;
+    font-size: 10px;
+    color: var(--text-faint);
+    display: flex;
+    justify-content: space-between;
+    letter-spacing: 0.1em;
+  }
+  .footer-bar .blink { animation: pulse 1.2s infinite; color: var(--green); }
+
+  /* Observer list */
+  .observer-list { display: flex; flex-direction: column; gap: 6px; }
+  .observer-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--cyan);
+    transition: background 0.15s;
+  }
+  .observer-item:hover { background: var(--panel); }
+  .observer-item.primary {
+    background: rgba(0, 229, 255, 0.06);
+    box-shadow: inset 0 0 0 1px var(--cyan);
+  }
+  .observer-item.inactive { opacity: 0.45; }
+  .observer-checkbox {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--cyan);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .observer-info { flex: 1; min-width: 0; cursor: pointer; }
+  .observer-name {
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .observer-coords {
+    color: var(--text-dim);
+    font-size: 10px;
+    margin-top: 2px;
+  }
+  .observer-badge-primary {
+    display: inline-block;
+    background: var(--cyan);
+    color: var(--bg);
+    font-size: 8px;
+    letter-spacing: 0.15em;
+    padding: 1px 5px;
+    border-radius: 1px;
+    margin-left: 6px;
+    font-weight: 700;
+    vertical-align: middle;
+  }
+  .observer-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .observer-btn {
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    border: 1px solid var(--border-bright);
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  .observer-btn:hover { color: var(--text); border-color: var(--text-dim); }
+  .observer-btn.danger:hover { color: var(--red); border-color: var(--red); }
+
+  /* Observer color chip in pass table */
+  .obs-chip {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+    flex-shrink: 0;
+    border: 1px solid rgba(0,0,0,0.3);
+  }
+  .obs-name-cell {
+    color: var(--text);
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
+    display: inline-block;
+    vertical-align: middle;
+  }
+
+  /* Custom satellite icon styles */
+  .sat-marker {
+    filter: drop-shadow(0 0 6px var(--amber));
+  }
+  .observer-marker {
+    filter: drop-shadow(0 0 8px var(--cyan));
+  }
+
+  /* ============= THEME SWITCHER ============= */
+  .theme-switcher {
+    display: flex;
+    gap: 4px;
+    border: 1px solid var(--border-bright);
+    padding: 3px;
+    background: var(--panel);
+  }
+  .theme-btn {
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+  .theme-btn:hover { color: var(--text); background: var(--panel-2); }
+  .theme-btn.active {
+    color: var(--bg);
+    background: var(--cyan);
+    box-shadow: var(--glow-cyan);
+  }
+
+  .header-left { display: flex; align-items: center; gap: 14px; }
+  .menu-btn {
+    background: transparent;
+    border: 1px solid var(--border-bright);
+    color: var(--cyan);
+    width: 38px;
+    height: 38px;
+    font-size: 18px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  /* ============= MOBILE TABS (hidden on desktop) ============= */
+  .mobile-tabs {
+    display: none;
+    background: var(--bg-2);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 58px;
+    z-index: 90;
+  }
+  .tab-btn {
+    flex: 1;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-dim);
+    padding: 14px 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s;
+    min-height: 48px;
+  }
+  .tab-btn.active {
+    color: var(--cyan);
+    border-bottom-color: var(--cyan);
+    background: var(--panel);
+  }
+  .tab-btn:active { background: var(--panel-2); }
+
+  .mobile-only { display: none; }
+
+  /* ============= RESPONSIVE ============= */
+  @media (max-width: 900px) {
+    body { font-size: 14px; }
+
+    header {
+      padding: 10px 12px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .logo { font-size: 18px; }
+    .desktop-only { display: none !important; }
+    .mobile-only { display: inline-flex; }
+    .mobile-tabs { display: flex; }
+
+    .status-bar {
+      gap: 8px;
+      font-size: 10px;
+      width: 100%;
+      justify-content: space-between;
+    }
+    .status-item .val { margin-left: 4px; font-size: 11px; }
+
+    .theme-btn { width: 36px; height: 36px; font-size: 16px; }
+
+    /* Mobile layout: stacked column. Top = active pane, Bottom = map (always visible except on catalog tab) */
+    .container {
+      display: flex !important;
+      flex-direction: column;
+      background: var(--bg);
+    }
+    .col, .passes-wrap {
+      display: none;
+      width: 100%;
+      max-height: none;
+    }
+    .col { padding: 14px; }
+    .col.active-pane { display: block; }
+    .col.center.active-pane { display: flex; flex-direction: column; }
+    .passes-wrap.active-pane { display: block; }
+    .passes-wrap .panel-body { max-height: 60vh !important; }
+    .passes-wrap .panel-header { flex-wrap: wrap; gap: 8px; }
+    .pass-header-controls { width: 100%; gap: 6px; }
+    .pass-header-controls .pass-mode-btn { flex: 0 0 auto; }
+    .time-range-grid { grid-template-columns: 1fr; }
+
+    /* COMPANION MODE: when non-map tab is active, map is shown below as a smaller companion */
+    .col.center.companion-pane {
+      display: flex !important;
+      flex-direction: column;
+      min-height: 360px;
+      max-height: 55vh;
+      border-top: 3px solid var(--cyan);
+      position: relative;
+    }
+    .companion-badge {
+      display: none;
+      position: absolute;
+      top: 6px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg-2);
+      border: 1px solid var(--cyan);
+      color: var(--cyan);
+      padding: 3px 10px;
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      z-index: 500;
+      border-radius: 2px;
+    }
+    .col.center.companion-pane .companion-badge { display: block; }
+
+    /* When map tab is active (solo), map fills viewport */
+    body[data-tab-mode="map"] #map { min-height: calc(100vh - 200px); }
+    /* When map is companion (below other content), it's shorter */
+    body[data-tab-mode="data"] #map,
+    body[data-tab-mode="passes"] #map { min-height: 340px; }
+
+    /* On catalog tab, hide the map entirely — focus on inputs */
+    body[data-tab-mode="catalog"] .col.center { display: none !important; }
+
+    /* Larger touch targets on mobile */
+    input, textarea, select {
+      font-size: 16px;  /* prevents iOS zoom */
+      padding: 12px 14px;
+      min-height: 48px;
+    }
+    textarea { min-height: 100px; font-size: 13px; }
+    .btn { padding: 14px 16px; font-size: 13px; min-height: 48px; }
+
+    /* Bigger data values for readability */
+    .data-grid { grid-template-columns: 1fr 1fr; }
+    .data-cell { padding: 14px; }
+    .data-label { font-size: 10px; margin-bottom: 6px; }
+    .data-value { font-size: 22px; }
+    .data-value .unit { font-size: 12px; }
+
+    /* Map fills viewport-ish */
+    #map { min-height: calc(100vh - 240px); }
+
+    /* Sky view bigger */
+    .skyview-wrap { padding: 8px; }
+    #skyview { max-width: 380px; margin: 0 auto; }
+
+    /* Pass table mobile - detail mode = card layout */
+    .pass-table:not(.compact) thead { display: none; }
+    .pass-table:not(.compact),
+    .pass-table:not(.compact) tbody,
+    .pass-table:not(.compact) tr,
+    .pass-table:not(.compact) td {
+      display: block;
+      width: 100%;
+    }
+    .pass-table:not(.compact) tr {
+      border-bottom: 1px solid var(--border);
+      padding: 12px 14px;
+      background: var(--panel);
+      margin-bottom: 1px;
+    }
+    .pass-table:not(.compact) tr.selected {
+      box-shadow: inset 4px 0 0 var(--amber);
+    }
+    .pass-table:not(.compact) tr.passing {
+      box-shadow: inset 4px 0 0 var(--green);
+    }
+    .pass-table:not(.compact) td {
+      padding: 4px 0;
+      border: none;
+      position: relative;
+      padding-left: 110px;
+      min-height: 24px;
+      font-size: 13px;
+    }
+    .pass-table:not(.compact) td::before {
+      content: attr(data-label);
+      position: absolute;
+      left: 0;
+      top: 4px;
+      width: 100px;
+      color: var(--text-dim);
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+    .pass-table:not(.compact) td.num-cell {
+      padding-left: 0;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--amber);
+      margin-bottom: 6px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    .pass-table:not(.compact) td.num-cell::before { display: none; }
+
+    /* Pass mode toggle - bigger on mobile */
+    .pass-mode-btn { padding: 10px 14px; font-size: 11px; min-height: 40px; }
+
+    /* Compact mode on mobile - dense table, time-only, see many passes at once */
+    .pass-table.compact { font-size: 11px; }
+    /* Hide the detail header explicitly, show the compact header */
+    .pass-table.compact #pass-thead-detail { display: none !important; }
+    .pass-table.compact #pass-thead-compact { display: table-header-group !important; }
+    .pass-table.compact #pass-thead-compact th {
+      padding: 6px 3px;
+      font-size: 8px;
+      letter-spacing: 0.04em;
+      position: sticky;
+      top: 0;
+      background: var(--bg-2);
+      z-index: 5;
+    }
+    .pass-table.compact tr {
+      display: table-row !important;
+      background: transparent !important;
+      box-shadow: none !important;
+    }
+    .pass-table.compact tr.selected {
+      box-shadow: inset 0 0 0 1px var(--amber) !important;
+      background: rgba(255, 182, 39, 0.06) !important;
+    }
+    .pass-table.compact tr.passing {
+      background: rgba(0, 255, 136, 0.06) !important;
+    }
+    .pass-table.compact td {
+      display: table-cell !important;
+      padding: 8px 3px !important;
+      font-size: 11px !important;
+      border: none !important;
+      border-bottom: 1px solid var(--border) !important;
+      padding-left: 3px !important;
+      min-height: 0 !important;
+      text-align: left;
+      vertical-align: middle;
+    }
+    .pass-table.compact td::before { display: none !important; }
+    .pass-table.compact td.num-cell {
+      font-size: 10px !important;
+      font-weight: 700;
+      color: var(--amber) !important;
+      padding-left: 6px !important;
+      border: none !important;
+      border-bottom: 1px solid var(--border) !important;
+      margin: 0 !important;
+      padding-bottom: 8px !important;
+    }
+
+    /* Sat list bigger touch target */
+    .sat-item { padding: 14px 14px; min-height: 52px; }
+    .sat-item .name { font-size: 14px; }
+
+    .panel { margin-bottom: 12px; }
+    .panel-body { padding: 14px; }
+    .panel-header { padding: 12px 14px; }
+
+    /* Map legend more compact on mobile */
+    .map-legend {
+      font-size: 9px;
+      padding: 8px;
+      bottom: 8px;
+      left: 8px;
+      max-width: 160px;
+    }
+    .legend-row { padding: 2px 0; }
+
+    /* Preview bar wraps on mobile */
+    #preview-bar {
+      flex-wrap: wrap;
+      padding: 12px 14px !important;
+      gap: 8px !important;
+    }
+    #preview-slider { width: 100%; max-width: none !important; flex-basis: 100%; }
+    #preview-time { font-size: 12px !important; min-width: 0 !important; }
+  }
+
+  @media (max-width: 480px) {
+    .data-value { font-size: 20px; }
+    .logo { font-size: 16px; }
+    .logo .sub { display: none; }
+    .status-item { font-size: 9px; }
+    .theme-switcher { order: -1; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <span class="logo">ORBITAL<span class="sub desktop-only">// SATELLITE TRACKING TERMINAL v1.0</span></span>
+  </div>
+  <div class="status-bar">
+    <div class="status-item desktop-only"><span class="dot"></span>SYS<span class="val">ONLINE</span></div>
+    <div class="status-item">UTC<span class="val" id="utc-time">--:--:--</span></div>
+    <div class="status-item">KST<span class="val amber" id="local-time">--:--:--</span></div>
+    <div class="theme-switcher">
+      <button class="theme-btn" data-theme-set="dark" title="Dark theme">◐</button>
+      <button class="theme-btn" data-theme-set="light" title="Daylight theme">☀</button>
+      <button class="theme-btn" data-theme-set="phosphor" title="Phosphor theme">▦</button>
+    </div>
+  </div>
+</header>
+
+<!-- Mobile tab navigation -->
+<nav class="mobile-tabs">
+  <button class="tab-btn active" data-tab="map">▤ Map</button>
+  <button class="tab-btn" data-tab="data">◉ Live</button>
+  <button class="tab-btn" data-tab="catalog">⌖ Sats</button>
+  <button class="tab-btn" data-tab="passes">↗ Passes</button>
+</nav>
+
+<div class="container">
+
+  <!-- LEFT COLUMN: Input -->
+  <aside class="col" data-pane="catalog">
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Observers</span>
+        <span style="display:flex;gap:10px;align-items:center;">
+          <span style="color:var(--green);font-size:9px;letter-spacing:0.15em;" title="Observers are saved to browser storage">⬢ CACHED</span>
+          <span class="panel-title" id="observer-count" style="color:var(--cyan);"></span>
+        </span>
+      </div>
+      <div class="panel-body">
+        <div class="observer-list" id="observer-list"></div>
+        <div class="btn-row" style="margin-top:10px;">
+          <button class="btn ghost" id="add-observer-btn">+ Add Observer</button>
+          <button class="btn ghost" id="reset-observers-btn" title="Clear cache and restore default observer">⟲ Reset</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Observer editor dialog (inline) -->
+    <div class="panel" id="observer-editor" style="display:none; border-color: var(--amber);">
+      <div class="panel-header" style="background: rgba(255,182,39,0.06);">
+        <span class="panel-title" style="color:var(--amber);" id="observer-editor-title">▸ New Observer</span>
+        <span class="panel-title" style="cursor:pointer;color:var(--red);" id="observer-editor-close">✕</span>
+      </div>
+      <div class="panel-body">
+        <label>Name</label>
+        <input id="obs-name" type="text" placeholder="e.g. Daejeon, Home, KAIST...">
+        <div class="row">
+          <div>
+            <label>Latitude °N</label>
+            <input id="obs-lat" type="number" step="0.0001" value="36.3504">
+          </div>
+          <div>
+            <label>Longitude °E</label>
+            <input id="obs-lon" type="number" step="0.0001" value="127.3845">
+          </div>
+        </div>
+        <label>Altitude (meters)</label>
+        <input id="obs-alt" type="number" value="50">
+        <button class="btn ghost" id="geo-btn">⌖ Use My Location</button>
+        <div class="btn-row" style="margin-top:10px;">
+          <button class="btn" id="obs-save">▸ Save</button>
+          <button class="btn ghost" id="obs-cancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Satellite Catalog</span></div>
+      <div class="panel-body">
+        <label>Quick load from CelesTrak</label>
+        <select id="celestrak-group">
+          <option value="preset">★ Featured (NEONSAT, SPACEEYE, ETIHAD-SAT)</option>
+          <option value="stations">Space Stations (ISS, CSS...)</option>
+          <option value="active">Active Satellites</option>
+          <option value="visual">Brightest / Visible</option>
+          <option value="weather">Weather</option>
+          <option value="noaa">NOAA</option>
+          <option value="goes">GOES</option>
+          <option value="gps-ops">GPS</option>
+          <option value="galileo">Galileo</option>
+          <option value="starlink">Starlink</option>
+          <option value="amateur">Amateur Radio</option>
+          <option value="cubesat">CubeSats</option>
+          <option value="science">Science</option>
+        </select>
+        <button class="btn" id="load-celestrak">▸ Fetch Catalog</button>
+        <div id="catalog-status" class="note">No catalog loaded.</div>
+        <div class="sat-list" id="sat-list" style="display:none;"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Manual TLE Input</span></div>
+      <div class="panel-body">
+        <label>Satellite Name or NORAD ID</label>
+        <input id="tle-name" type="text" placeholder="e.g. ISS, STARLINK-1234, or 25544">
+        <button class="btn ghost" id="auto-fetch-tle">⌕ Auto-fetch TLE from CelesTrak</button>
+        <div id="auto-fetch-status" class="note" style="display:none;"></div>
+        <label>TLE Line 1</label>
+        <textarea id="tle-l1" placeholder="1 25544U 98067A   ..."></textarea>
+        <label>TLE Line 2</label>
+        <textarea id="tle-l2" placeholder="2 25544  51.6...."></textarea>
+        <button class="btn amber" id="load-tle">▸ Track Satellite</button>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- CENTER COLUMN: Map -->
+  <main class="col center" data-pane="map">
+    <div class="companion-badge">◉ Ground Track</div>
+    <div id="map" style="position:relative;">
+      <div class="map-legend">
+        <div class="legend-title">▸ Legend</div>
+        <div class="legend-row">
+          <div class="legend-swatch" style="background:linear-gradient(90deg,#ffb627,#fff);box-shadow:0 0 8px #ffb627;"></div>
+          <span>Future track</span>
+        </div>
+        <div class="legend-row">
+          <div class="legend-swatch" style="background:repeating-linear-gradient(90deg,#00e5ff 0 3px,transparent 3px 6px);"></div>
+          <span>Past track</span>
+        </div>
+        <div class="legend-row">
+          <div class="legend-dot" style="background:#ffb627;box-shadow:0 0 8px #ffb627;"></div>
+          <span>Satellite</span>
+        </div>
+        <div class="legend-row">
+          <div class="legend-dot" style="background:transparent;border:2px dashed #00e5ff;"></div>
+          <span>Visibility footprint</span>
+        </div>
+        <div class="legend-row">
+          <div class="legend-dot" style="background:transparent;border:2px solid #00e5ff;box-shadow:0 0 6px #00e5ff;"></div>
+          <span>Observer</span>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bar">
+      <span>GROUND TRACK · MERCATOR PROJECTION</span>
+      <span class="blink" id="track-status">◉ READY</span>
+    </div>
+  </main>
+
+  <!-- RIGHT COLUMN: Data -->
+  <aside class="col" data-pane="data">
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Active Target</span>
+        <span class="panel-title" id="target-norad" style="color:var(--amber);"></span>
+      </div>
+      <div class="panel-body">
+        <div id="target-name" style="font-size:14px;color:var(--cyan);margin-bottom:4px;text-shadow:0 0 6px rgba(0,229,255,0.3);">— NO TARGET —</div>
+        <div class="coord-display" id="target-info">Select a satellite to begin tracking.</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Real-Time Telemetry</span>
+        <span id="telemetry-observer-label" style="color:var(--text-dim);font-size:10px;letter-spacing:0.1em;"></span>
+      </div>
+      <div class="data-grid">
+        <div class="data-cell">
+          <div class="data-label">Sub-Lat</div>
+          <div class="data-value" id="d-lat">—</div>
+        </div>
+        <div class="data-cell">
+          <div class="data-label">Sub-Lon</div>
+          <div class="data-value" id="d-lon">—</div>
+        </div>
+        <div class="data-cell">
+          <div class="data-label">Altitude</div>
+          <div class="data-value amber" id="d-alt">— <span class="unit">km</span></div>
+        </div>
+        <div class="data-cell">
+          <div class="data-label">Velocity</div>
+          <div class="data-value amber" id="d-vel">— <span class="unit">km/s</span></div>
+        </div>
+        <div class="data-cell">
+          <div class="data-label">Azimuth</div>
+          <div class="data-value" id="d-az">—</div>
+        </div>
+        <div class="data-cell">
+          <div class="data-label">Elevation</div>
+          <div class="data-value" id="d-el">—</div>
+        </div>
+        <div class="data-cell">
+          <div class="data-label">Range</div>
+          <div class="data-value" id="d-range">— <span class="unit">km</span></div>
+        </div>
+        <div class="data-cell">
+          <div class="data-label">Visibility</div>
+          <div class="data-value" id="d-vis">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Sky View · Stereographic</span></div>
+      <div class="skyview-wrap">
+        <svg id="skyview" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- BOTTOM: Pass predictions (inside container so mobile flex-order works) -->
+  <div data-pane="passes" class="passes-wrap">
+    <div class="panel" style="margin: 0; border: none;">
+      <div class="panel-header" style="flex-wrap:wrap; gap: 8px;">
+        <span class="panel-title" id="pass-panel-title">Pass Predictions · Next 72 Hours</span>
+        <div class="pass-header-controls">
+          <button class="pass-mode-btn" id="time-range-btn" title="Custom time range">⏱ Range</button>
+          <button class="pass-mode-btn" id="csv-download-btn" title="Download as CSV">⤓ CSV</button>
+          <div class="pass-mode-toggle">
+            <button class="pass-mode-btn" data-pass-mode="detail" title="Detail mode">≡ Detail</button>
+            <button class="pass-mode-btn" data-pass-mode="compact" title="Compact mode">⋮ Compact</button>
+          </div>
+          <span class="panel-title" id="pass-count" style="color:var(--cyan);"></span>
+        </div>
+      </div>
+
+      <!-- Custom time range editor (collapsed by default) -->
+      <div id="time-range-bar" style="display:none; padding: 12px 16px; background: rgba(0,229,255,0.05); border-bottom: 1px solid var(--border);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+          <span style="color:var(--cyan);font-size:10px;letter-spacing:0.2em;text-transform:uppercase;">▸ Custom Time Range</span>
+          <div class="range-mode-toggle" style="margin-left:auto;">
+            <button class="pass-mode-btn active" data-range-tz="utc">UTC</button>
+            <button class="pass-mode-btn" data-range-tz="kst">KST</button>
+          </div>
+        </div>
+        <div class="time-range-grid">
+          <div>
+            <label style="margin:0 0 4px 0;">Start (<span class="range-tz-label">UTC</span>)</label>
+            <input id="range-start" type="datetime-local" step="60">
+          </div>
+          <div>
+            <label style="margin:0 0 4px 0;">End (<span class="range-tz-label">UTC</span>)</label>
+            <input id="range-end" type="datetime-local" step="60">
+          </div>
+        </div>
+        <div class="quick-range-btns">
+          <button class="pass-mode-btn" data-quick-range="24">Next 24h</button>
+          <button class="pass-mode-btn" data-quick-range="72">Next 72h</button>
+          <button class="pass-mode-btn" data-quick-range="168">Next 7 days</button>
+          <button class="pass-mode-btn" data-quick-range="today-kst">Today (KST)</button>
+          <button class="pass-mode-btn" data-quick-range="tomorrow-kst">Tomorrow (KST)</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+          <button class="btn" id="range-apply" style="flex:1;min-width:140px;">▸ Compute Passes</button>
+          <button class="btn ghost" id="range-reset" style="flex:1;min-width:140px;">⟲ Reset to 72h</button>
+        </div>
+        <div id="range-status" class="note" style="margin-top:6px;display:none;"></div>
+      </div>
+
+      <div id="preview-bar" style="display:none; padding: 10px 16px; background: rgba(255,182,39,0.05); border-bottom: 1px solid var(--border); align-items:center; gap: 14px;">
+        <span style="color:var(--amber); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;">▸ Preview Pass <span id="preview-num" style="color:var(--cyan);"></span></span>
+        <span style="color:var(--text-dim); font-size: 10px;">AOS</span>
+        <input type="range" id="preview-slider" min="0" max="1000" value="500" style="flex:1; accent-color: var(--amber); max-width: 400px;">
+        <span style="color:var(--text-dim); font-size: 10px;">LOS</span>
+        <span id="preview-time" style="color:var(--cyan); font-size: 11px; font-weight: 500; min-width: 220px;"></span>
+        <button id="preview-exit" style="background:transparent;border:1px solid var(--red);color:var(--red);padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;cursor:pointer;">✕ Live Mode</button>
+      </div>
+      <div class="panel-body" id="pass-panel-body" style="padding: 0; max-height: 320px; overflow-y: auto;">
+        <table class="pass-table" id="pass-table">
+          <thead id="pass-thead-detail">
+            <tr>
+              <th>#</th>
+              <th>Observer</th>
+              <th>AOS · <span style="color:var(--cyan)">UTC</span> / <span style="color:var(--amber)">KST</span></th>
+              <th>Az</th>
+              <th>Max Elev (TCA)</th>
+              <th>LOS · <span style="color:var(--cyan)">UTC</span> / <span style="color:var(--amber)">KST</span></th>
+              <th>Az</th>
+              <th>Duration</th>
+            </tr>
+          </thead>
+          <thead id="pass-thead-compact" style="display:none;">
+            <tr>
+              <th>#</th>
+              <th>Obs</th>
+              <th>Date</th>
+              <th>AOS <span style="color:var(--amber)">KST</span></th>
+              <th>LOS <span style="color:var(--amber)">KST</span></th>
+              <th>Max El</th>
+              <th>Dur</th>
+            </tr>
+          </thead>
+          <tbody id="pass-tbody">
+            <tr><td colspan="7" class="note" style="padding:18px;text-align:center;">No active target. Load a satellite to compute passes.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ============= THEME SYSTEM =============
+(function() {
+  const THEME_KEY = 'orbital_theme_v1';
+
+  function loadTheme() {
+    try {
+      const saved = localStorage.getItem(THEME_KEY);
+      if (saved === 'dark' || saved === 'light' || saved === 'phosphor') return saved;
+    } catch (_) {}
+    return null;
+  }
+
+  function saveTheme(t) {
+    try { localStorage.setItem(THEME_KEY, t); } catch (_) {}
+  }
+
+  // Priority: saved choice → system preference → dark default
+  let currentTheme = loadTheme();
+  if (!currentTheme) {
+    try {
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+        currentTheme = 'light';
+      } else {
+        currentTheme = 'dark';
+      }
+    } catch (_) {
+      currentTheme = 'dark';
+    }
+  }
+
+  function applyTheme(t) {
+    currentTheme = t;
+    document.documentElement.setAttribute('data-theme', t);
+    document.querySelectorAll('.theme-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.themeSet === t);
+    });
+    saveTheme(t);
+    // Re-render all dynamic visuals to pick up new theme colors
+    if (window._map && window._refreshVisuals) {
+      window._refreshVisuals();
+    }
+  }
+
+  // Apply initial theme immediately to avoid flash
+  document.documentElement.setAttribute('data-theme', currentTheme);
+
+  document.addEventListener('DOMContentLoaded', () => {
+    applyTheme(currentTheme);
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+      btn.addEventListener('click', () => applyTheme(btn.dataset.themeSet));
+    });
+  });
+})();
+
+// ============= MOBILE TAB NAVIGATION =============
+(function() {
+  // Which panes are visible for each tab. Map is included as the second pane
+  // for content-heavy tabs so users can see the satellite while reading data.
+  const TAB_PANES = {
+    'map':     ['map'],
+    'data':    ['data', 'map'],
+    'catalog': ['catalog'],
+    'passes':  ['passes', 'map'],
+  };
+
+  function showPane(name) {
+    const panes = TAB_PANES[name] || [name];
+    document.querySelectorAll('[data-pane]').forEach(el => {
+      const idx = panes.indexOf(el.dataset.pane);
+      if (idx >= 0) {
+        el.classList.add('active-pane');
+        el.style.order = String(idx);
+        // Map is "companion" when it's not the primary pane (idx > 0)
+        if (el.dataset.pane === 'map') {
+          el.classList.toggle('companion-pane', idx > 0);
+        }
+      } else {
+        el.classList.remove('active-pane');
+        el.classList.remove('companion-pane');
+        el.style.order = '';
+      }
+    });
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tab === name);
+    });
+    document.body.setAttribute('data-tab-mode', name);
+    // Trigger map resize if map is being shown
+    if (panes.includes('map') && window._map) {
+      setTimeout(() => window._map.invalidateSize(), 50);
+    }
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => showPane(btn.dataset.tab));
+    });
+    document.querySelector('[data-pane="map"]').classList.add('active-pane');
+    document.body.setAttribute('data-tab-mode', 'map');
+  });
+
+  window.showPane = showPane;
+})();
+
+// ============= LIBRARY LOADER WITH FALLBACK =============
+function loadScript(urls, name) {
+  return new Promise((resolve, reject) => {
+    let idx = 0;
+    function tryNext() {
+      if (idx >= urls.length) {
+        reject(new Error(`Failed to load ${name} from all CDNs`));
+        return;
+      }
+      const s = document.createElement('script');
+      s.src = urls[idx];
+      s.onload = () => resolve();
+      s.onerror = () => { idx++; tryNext(); };
+      document.head.appendChild(s);
+    }
+    tryNext();
+  });
+}
+
+async function bootstrap() {
+  const statusEl = document.getElementById('catalog-status');
+  try {
+    if (statusEl) { statusEl.className = 'note'; statusEl.textContent = '▸ Loading Leaflet...'; }
+    await loadScript([
+      'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
+      'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js'
+    ], 'Leaflet');
+
+    if (statusEl) statusEl.textContent = '▸ Loading satellite.js...';
+    await loadScript([
+      'https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js',
+      'https://unpkg.com/satellite.js@5.0.0/dist/satellite.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/satellite.js/5.0.0/satellite.min.js'
+    ], 'satellite.js');
+
+    if (typeof L === 'undefined') throw new Error('Leaflet (L) not available after load');
+    if (typeof satellite === 'undefined') throw new Error('satellite.js not available after load');
+
+    initApp();
+  } catch (e) {
+    document.getElementById('map').innerHTML =
+      `<div style="padding:40px;color:#ff3860;font-family:'JetBrains Mono',monospace;text-align:center;">
+        <div style="font-size:14px;margin-bottom:12px;">⚠ LIBRARY LOAD FAILED</div>
+        <div style="font-size:11px;color:#6e7a89;">${e.message}</div>
+        <div style="font-size:11px;color:#6e7a89;margin-top:12px;">Check your network connection or CDN access and reload.</div>
+      </div>`;
+    if (statusEl) { statusEl.className = 'error'; statusEl.textContent = '✗ ' + e.message; }
+  }
+}
+
+function initApp() {
+
+// ============= STATE =============
+const STORAGE_KEY = 'orbital_observers_v1';
+const PRIMARY_KEY = 'orbital_primary_observer_v1';
+
+// Distinct colors for observers (cycle through)
+const OBSERVER_COLORS = ['#00e5ff', '#ffb627', '#00ff88', '#ff00d4', '#ff8866', '#88aaff', '#ffeb3b', '#ce93d8'];
+
+// Default observers if nothing in storage
+const DEFAULT_OBSERVERS = [
+  { id: 'obs-1', name: 'KARI (Daejeon)',       lat:  36.3960, lon: 127.3660, alt: 0.10,  active: true, color: '#00e5ff' },
+  { id: 'obs-2', name: 'MBRSC (Dubai)',        lat:  25.1216, lon:  55.3771, alt: 0.05,  active: true, color: '#ffb627' },
+  { id: 'obs-3', name: 'King Sejong (Antarctica)', lat: -62.2231, lon: -58.7873, alt: 0.01,  active: true, color: '#00ff88' },
+  { id: 'obs-4', name: 'SvalSat (Svalbard)',   lat:  78.2280, lon:  15.3990, alt: 0.45,  active: true, color: '#ff00d4' },
+];
+
+function loadObserversFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || !parsed.length) return null;
+    const valid = parsed.filter(o =>
+      o && typeof o.id === 'string'
+        && typeof o.name === 'string'
+        && typeof o.lat === 'number' && o.lat >= -90 && o.lat <= 90
+        && typeof o.lon === 'number' && o.lon >= -180 && o.lon <= 180
+        && typeof o.alt === 'number'
+    );
+    if (!valid.length) return null;
+    valid.forEach((o, i) => {
+      if (!o.color) o.color = OBSERVER_COLORS[i % OBSERVER_COLORS.length];
+      if (typeof o.active !== 'boolean') o.active = true;
+    });
+    return valid;
+  } catch (e) {
+    console.warn('Failed to load observers from storage:', e);
+    return null;
+  }
+}
+
+function saveObserversToStorage() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.observers));
+    localStorage.setItem(PRIMARY_KEY, state.primaryObserverId);
+  } catch (e) {
+    console.warn('Failed to save observers:', e);
+  }
+}
+
+// Try loading from storage, otherwise use defaults
+const storedObservers = loadObserversFromStorage();
+const storedPrimary = (() => {
+  try { return localStorage.getItem(PRIMARY_KEY); } catch (e) { return null; }
+})();
+
+const initialObservers = storedObservers || DEFAULT_OBSERVERS.map(o => ({ ...o }));
+
+// Migration: ensure built-in default observers exist (by id). Users keep their custom observers.
+// Also upgrade observers that still hold the old default coordinates to the new defaults
+// (so users who never edited the defaults get the updated names/locations).
+let migrated = false;
+const OLD_DEFAULT_OBS1 = { lat: 36.3504, lon: 127.3845 };  // pre-update Daejeon coords
+
+DEFAULT_OBSERVERS.forEach(def => {
+  const existing = initialObservers.find(o => o.id === def.id);
+  if (!existing) {
+    initialObservers.push({ ...def });
+    migrated = true;
+  } else if (def.id === 'obs-1'
+      && Math.abs(existing.lat - OLD_DEFAULT_OBS1.lat) < 0.0001
+      && Math.abs(existing.lon - OLD_DEFAULT_OBS1.lon) < 0.0001) {
+    // Auto-upgrade unedited old Daejeon Default → KARI
+    existing.name = def.name;
+    existing.lat = def.lat;
+    existing.lon = def.lon;
+    existing.alt = def.alt;
+    migrated = true;
+  }
+});
+
+const state = {
+  observers: initialObservers,
+  primaryObserverId: null,
+  catalog: [],
+  target: null,
+  passes: [],
+  trackLayer: null,
+  satMarker: null,
+  obsMarkers: {},
+  rangeCircle: null,
+  preview: null,
+  passTrackLayer: null,
+  // Pass prediction time range. null = default rolling "Next 72h"
+  passRange: null,  // { startTime: Date, endTime: Date, label: string } or null
+};
+
+// Validate primary observer id
+state.primaryObserverId = (storedPrimary && state.observers.some(o => o.id === storedPrimary))
+  ? storedPrimary
+  : state.observers[0].id;
+
+// Persist migration result so the new defaults stick across reloads
+if (migrated) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.observers));
+    localStorage.setItem(PRIMARY_KEY, state.primaryObserverId);
+  } catch (e) {}
+}
+
+function getActiveObservers() {
+  return state.observers.filter(o => o.active);
+}
+function getPrimaryObserver() {
+  return state.observers.find(o => o.id === state.primaryObserverId) || state.observers[0];
+}
+function findObserver(id) {
+  return state.observers.find(o => o.id === id);
+}
+function nextObserverColor() {
+  const used = new Set(state.observers.map(o => o.color));
+  for (const c of OBSERVER_COLORS) if (!used.has(c)) return c;
+  return OBSERVER_COLORS[state.observers.length % OBSERVER_COLORS.length];
+}
+
+// ============= UTILITIES =============
+const deg = (r) => r * 180 / Math.PI;
+const rad = (d) => d * Math.PI / 180;
+const pad = (n) => String(n).padStart(2, '0');
+
+// Read CSS theme variable for use in dynamic SVG/canvas drawing
+function themeColor(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue('--' + name).trim() || '#888';
+}
+
+function fmtTime(d) {
+  return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+}
+function fmtLocal(d) {
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+function fmtDateTime(d, useLocal = true) {
+  if (useLocal) {
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())} UTC`;
+}
+function fmtKST(d) {
+  // Korea Standard Time = UTC+9
+  const k = new Date(d.getTime() + 9 * 3600 * 1000);
+  return `${k.getUTCFullYear()}-${pad(k.getUTCMonth()+1)}-${pad(k.getUTCDate())} ${pad(k.getUTCHours())}:${pad(k.getUTCMinutes())}:${pad(k.getUTCSeconds())}`;
+}
+function fmtKSTTime(d) {
+  const k = new Date(d.getTime() + 9 * 3600 * 1000);
+  return `${pad(k.getUTCHours())}:${pad(k.getUTCMinutes())}:${pad(k.getUTCSeconds())}`;
+}
+function fmtDuration(ms) {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}m ${pad(sec)}s`;
+}
+function compass(az) {
+  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return dirs[Math.round(az / 22.5) % 16];
+}
+
+// ============= CLOCK =============
+function updateClock() {
+  const now = new Date();
+  document.getElementById('utc-time').textContent = fmtTime(now);
+  document.getElementById('local-time').textContent = fmtKSTTime(now);
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ============= MAP =============
+const map = L.map('map', {
+  center: [20, 0],
+  zoom: 2,
+  worldCopyJump: true,
+  zoomControl: true,
+  attributionControl: true,
+});
+window._map = map;
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap · SGP4 propagation via satellite.js · TLE: CelesTrak',
+  maxZoom: 8,
+  minZoom: 1,
+}).addTo(map);
+
+function obsIcon(color) {
+  const c = color || themeColor('cyan');
+  return L.divIcon({
+    html: `<svg width="24" height="24" viewBox="0 0 24 24" style="filter:drop-shadow(0 0 6px ${c});">
+      <circle cx="12" cy="12" r="10" fill="none" stroke="${c}" stroke-width="1.5"/>
+      <circle cx="12" cy="12" r="3.5" fill="${c}"/>
+      <line x1="12" y1="1" x2="12" y2="5" stroke="${c}" stroke-width="1.2"/>
+      <line x1="12" y1="19" x2="12" y2="23" stroke="${c}" stroke-width="1.2"/>
+      <line x1="1" y1="12" x2="5" y2="12" stroke="${c}" stroke-width="1.2"/>
+      <line x1="19" y1="12" x2="23" y2="12" stroke="${c}" stroke-width="1.2"/>
+    </svg>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+    className: '',
+  });
+}
+
+function refreshObserverMarkers() {
+  // Remove existing markers
+  Object.values(state.obsMarkers).forEach(m => map.removeLayer(m));
+  state.obsMarkers = {};
+  // Add markers for all active observers
+  getActiveObservers().forEach(obs => {
+    const isPrimary = obs.id === state.primaryObserverId;
+    const marker = L.marker([obs.lat, obs.lon], { icon: obsIcon(obs.color) })
+      .addTo(map)
+      .bindPopup(`<b>${obs.name}</b>${isPrimary ? ' <span style="color:#00e5ff;font-size:9px;">[PRIMARY]</span>' : ''}<br>${obs.lat.toFixed(4)}°, ${obs.lon.toFixed(4)}°<br>Alt: ${(obs.alt*1000).toFixed(0)} m`);
+    state.obsMarkers[obs.id] = marker;
+  });
+}
+function satIcon() {
+  const amber = themeColor('amber');
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+  const core = isDark ? '#fff' : amber;
+  const glow = isDark ? `filter:drop-shadow(0 0 8px ${amber}) drop-shadow(0 0 16px ${amber}88);` : `filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4));`;
+  return L.divIcon({
+    html: `<svg width="36" height="36" viewBox="0 0 36 36" style="${glow}">
+      <circle cx="18" cy="18" r="14" fill="none" stroke="${amber}" stroke-width="1" opacity="0.3">
+        <animate attributeName="r" values="10;16;10" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.5;0;0.5" dur="2s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="18" cy="18" r="6" fill="${amber}" stroke="${core}" stroke-width="1.5"/>
+      <circle cx="18" cy="18" r="2" fill="${core}"/>
+      <line x1="18" y1="2" x2="18" y2="8" stroke="${amber}" stroke-width="2" stroke-linecap="round"/>
+      <line x1="18" y1="28" x2="18" y2="34" stroke="${amber}" stroke-width="2" stroke-linecap="round"/>
+      <line x1="2" y1="18" x2="8" y2="18" stroke="${amber}" stroke-width="2" stroke-linecap="round"/>
+      <line x1="28" y1="18" x2="34" y2="18" stroke="${amber}" stroke-width="2" stroke-linecap="round"/>
+    </svg>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
+    className: '',
+  });
+}
+
+function refreshObserverMarker() {
+  // Backward-compatible alias for multi-observer version
+  refreshObserverMarkers();
+}
+refreshObserverMarkers();
+renderObserverList();
+
+// Expose refresh helper for theme switcher to call after color change
+window._refreshVisuals = function() {
+  refreshObserverMarkers();
+  if (state.target) {
+    drawGroundTrack();
+    if (state.preview) {
+      const pass = state.passes[state.preview.passIndex];
+      drawPassTrack(pass);
+      renderAtTime(state.preview.time, { isPreview: true, pass });
+    } else {
+      renderAtTime(new Date(), { isPreview: false });
+    }
+  } else {
+    drawSkyView({ el: -90, az: 0 });
+  }
+};
+
+// ============= SATELLITE COMPUTATION =============
+function getSatPosition(satrec, date, observer) {
+  const pv = satellite.propagate(satrec, date);
+  if (!pv.position) return null;
+  const gmst = satellite.gstime(date);
+  const geo = satellite.eciToGeodetic(pv.position, gmst);
+  const obs = observer || getPrimaryObserver();
+  const obsGd = {
+    longitude: rad(obs.lon),
+    latitude: rad(obs.lat),
+    height: obs.alt,
+  };
+  const lookAngles = satellite.ecfToLookAngles(obsGd, satellite.eciToEcf(pv.position, gmst));
+  const velKms = Math.sqrt(pv.velocity.x**2 + pv.velocity.y**2 + pv.velocity.z**2);
+  return {
+    lat: deg(geo.latitude),
+    lon: deg(geo.longitude),
+    alt: geo.height,           // km
+    az: deg(lookAngles.azimuth),
+    el: deg(lookAngles.elevation),
+    range: lookAngles.rangeSat, // km
+    velocity: velKms,
+    eci: pv.position,
+  };
+}
+
+// ============= GROUND TRACK =============
+function computeGroundTrack(satrec, fromDate, minutes = 100, stepSec = 30) {
+  const segments = [];
+  let current = [];
+  let prevLon = null;
+  for (let s = 0; s <= minutes * 60; s += stepSec) {
+    const d = new Date(fromDate.getTime() + s * 1000);
+    const pv = satellite.propagate(satrec, d);
+    if (!pv.position) continue;
+    const geo = satellite.eciToGeodetic(pv.position, satellite.gstime(d));
+    const lat = deg(geo.latitude);
+    const lon = deg(geo.longitude);
+    if (prevLon !== null && Math.abs(lon - prevLon) > 180) {
+      segments.push(current);
+      current = [];
+    }
+    current.push([lat, lon]);
+    prevLon = lon;
+  }
+  if (current.length) segments.push(current);
+  return segments;
+}
+
+// ============= PASS PREDICTION =============
+function predictPasses(satrec, observer, hoursOrOptions = 72, minElevation = 0) {
+  const passes = [];
+  const stepSec = 30;
+  // Support both old signature (hours number) and new (options object with startTime/endTime)
+  let startTime, endTime;
+  if (typeof hoursOrOptions === 'object' && hoursOrOptions !== null) {
+    startTime = hoursOrOptions.startTime || new Date();
+    endTime = hoursOrOptions.endTime || new Date(startTime.getTime() + 72 * 3600 * 1000);
+    if (hoursOrOptions.minElevation !== undefined) minElevation = hoursOrOptions.minElevation;
+  } else {
+    startTime = new Date();
+    endTime = new Date(startTime.getTime() + hoursOrOptions * 3600 * 1000);
+  }
+
+  let inPass = false;
+  let aos = null, los = null;
+  let maxEl = -90, maxElTime = null, maxAz = 0;
+  let aosAz = 0, losAz = 0;
+
+  const obs = observer || getPrimaryObserver();
+  const obsGd = {
+    longitude: rad(obs.lon),
+    latitude: rad(obs.lat),
+    height: obs.alt,
+  };
+
+  for (let t = startTime.getTime(); t < endTime.getTime(); t += stepSec * 1000) {
+    const d = new Date(t);
+    const pv = satellite.propagate(satrec, d);
+    if (!pv.position) continue;
+    const la = satellite.ecfToLookAngles(obsGd, satellite.eciToEcf(pv.position, satellite.gstime(d)));
+    const elDeg = deg(la.elevation);
+    const azDeg = deg(la.azimuth);
+
+    if (!inPass && elDeg >= minElevation) {
+      inPass = true;
+      aos = refineCrossing(satrec, t - stepSec * 1000, t, minElevation, obsGd, true);
+      aosAz = aos.az;
+      maxEl = elDeg;
+      maxElTime = d;
+      maxAz = azDeg;
+    } else if (inPass) {
+      if (elDeg > maxEl) {
+        maxEl = elDeg;
+        maxElTime = d;
+        maxAz = azDeg;
+      }
+      if (elDeg < minElevation) {
+        inPass = false;
+        los = refineCrossing(satrec, t - stepSec * 1000, t, minElevation, obsGd, false);
+        losAz = los.az;
+        passes.push({
+          aos: aos.date,
+          aosAz,
+          los: los.date,
+          losAz,
+          maxEl,
+          maxElTime,
+          maxAz,
+          duration: los.date.getTime() - aos.date.getTime(),
+        });
+        if (passes.length >= 30) break;
+        maxEl = -90;
+      }
+    }
+  }
+  return passes;
+}
+
+function refineCrossing(satrec, t0, t1, threshold, obsGd, ascending) {
+  // bisection
+  for (let i = 0; i < 14; i++) {
+    const mid = (t0 + t1) / 2;
+    const d = new Date(mid);
+    const pv = satellite.propagate(satrec, d);
+    if (!pv.position) return { date: d, az: 0 };
+    const la = satellite.ecfToLookAngles(obsGd, satellite.eciToEcf(pv.position, satellite.gstime(d)));
+    const elDeg = deg(la.elevation);
+    if ((ascending && elDeg < threshold) || (!ascending && elDeg >= threshold)) {
+      t0 = mid;
+    } else {
+      t1 = mid;
+    }
+  }
+  const final = new Date((t0 + t1) / 2);
+  const pv = satellite.propagate(satrec, final);
+  const la = satellite.ecfToLookAngles(obsGd, satellite.eciToEcf(pv.position, satellite.gstime(final)));
+  return { date: final, az: deg(la.azimuth) };
+}
+
+// Predict passes across ALL active observers and merge into a single time-sorted list
+function predictAllPasses(satrec, hoursOrOptions = 72, minElevation = 0) {
+  const active = getActiveObservers();
+  const all = [];
+  for (const obs of active) {
+    const passes = predictPasses(satrec, obs, hoursOrOptions, minElevation);
+    for (const p of passes) {
+      p.observerId = obs.id;
+      p.observerName = obs.name;
+      p.observerColor = obs.color;
+      all.push(p);
+    }
+  }
+  all.sort((a, b) => a.aos.getTime() - b.aos.getTime());
+  return all;
+}
+
+// Get the current options for pass prediction based on user's selected range
+function getPassPredictionOptions() {
+  if (state.passRange) {
+    return { startTime: state.passRange.startTime, endTime: state.passRange.endTime };
+  }
+  return 72;  // Default: rolling "next 72 hours"
+}
+
+// Update the panel title based on selected range
+function updatePassPanelTitle() {
+  const title = document.getElementById('pass-panel-title');
+  if (!title) return;
+  if (state.passRange) {
+    title.innerHTML = `Pass Predictions · <span style="color:var(--cyan);">${state.passRange.label}</span>`;
+  } else {
+    title.textContent = 'Pass Predictions · Next 72 Hours';
+  }
+}
+
+// ============= UI: TARGET LOAD =============
+function setTarget(name, l1, l2, noradId) {
+  try {
+    const satrec = satellite.twoline2satrec(l1, l2);
+    if (satrec.error) {
+      showError(`SGP4 init error: ${satrec.error}`);
+      return;
+    }
+    if (state.preview) {
+      state.preview = null;
+      document.getElementById('preview-bar').style.display = 'none';
+      if (state.passTrackLayer) { map.removeLayer(state.passTrackLayer); state.passTrackLayer = null; }
+    }
+    state.target = { name, l1, l2, satrec, norad: noradId || extractNorad(l1) };
+
+    document.getElementById('target-name').textContent = name;
+    document.getElementById('target-norad').textContent = state.target.norad ? `NORAD ${state.target.norad}` : '';
+    document.getElementById('track-status').textContent = '◉ TRACKING';
+
+    drawGroundTrack();
+    document.getElementById('target-info').innerHTML = `
+      <strong>EPOCH</strong> ${epochString(satrec)}<br>
+      <strong>INCL</strong> ${deg(satrec.inclo).toFixed(3)}° &nbsp; <strong>ECC</strong> ${satrec.ecco.toFixed(5)}<br>
+      <strong>MEAN MOTION</strong> ${(satrec.no * 1440 / (2*Math.PI)).toFixed(4)} rev/day
+    `;
+
+    const passes = predictAllPasses(satrec, getPassPredictionOptions(), 0);
+    state.passes = passes;
+    renderPassTable(passes);
+    document.getElementById('pass-count').textContent = `${passes.length} PASSES · ${getActiveObservers().length} OBS`;
+    updatePassPanelTitle();
+
+    // highlight in list
+    document.querySelectorAll('.sat-item').forEach(el => el.classList.remove('active'));
+    const matchItem = document.querySelector(`.sat-item[data-name="${cssEscape(name)}"]`);
+    if (matchItem) matchItem.classList.add('active');
+
+    // On mobile, switch to live data view after target selection
+    if (window.innerWidth <= 900 && window.showPane) {
+      window.showPane('data');
+    }
+  } catch (e) {
+    showError(`Failed to parse TLE: ${e.message}`);
+  }
+}
+
+function cssEscape(s) { return s.replace(/"/g, '\\"'); }
+
+function extractNorad(l1) {
+  if (!l1) return '';
+  const m = l1.trim().match(/^1\s+(\d+)/);
+  return m ? m[1] : '';
+}
+function epochString(satrec) {
+  // satrec.epochyr, satrec.epochdays
+  const y = satrec.epochyr < 57 ? 2000 + satrec.epochyr : 1900 + satrec.epochyr;
+  const start = new Date(Date.UTC(y, 0, 1));
+  const d = new Date(start.getTime() + (satrec.epochdays - 1) * 86400000);
+  return fmtDateTime(d, false);
+}
+
+function drawGroundTrack() {
+  if (state.trackLayer) map.removeLayer(state.trackLayer);
+  if (!state.target) return;
+  const period = (2 * Math.PI / state.target.satrec.no); // min
+  const now = new Date();
+  const fwdMin = Math.min(period * 1.5, 240);
+  const backMin = Math.min(period * 0.5, 60);
+
+  const cyan = themeColor('cyan');
+  const amber = themeColor('amber');
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+  const coreColor = isDark ? '#ffffff' : amber;
+
+  const futureSegs = computeGroundTrack(state.target.satrec, now, fwdMin, 20);
+  const pastStart = new Date(now.getTime() - backMin * 60 * 1000);
+  const pastSegs = computeGroundTrack(state.target.satrec, pastStart, backMin, 20);
+
+  const group = L.layerGroup();
+
+  // PAST track — dashed, dim cyan
+  pastSegs.forEach(seg => {
+    if (seg.length > 1) {
+      L.polyline(seg, { color: cyan, weight: 5, opacity: 0.12, lineCap: 'round' }).addTo(group);
+      L.polyline(seg, { color: cyan, weight: 1.8, opacity: 0.55, dashArray: '2 5', lineCap: 'round' }).addTo(group);
+    }
+  });
+
+  // FUTURE track — solid amber with strong glow
+  futureSegs.forEach(seg => {
+    if (seg.length > 1) {
+      if (isDark) {
+        L.polyline(seg, { color: amber, weight: 8, opacity: 0.18, lineCap: 'round' }).addTo(group);
+      }
+      L.polyline(seg, { color: amber, weight: 4, opacity: 0.55, lineCap: 'round' }).addTo(group);
+      L.polyline(seg, { color: coreColor, weight: 1.8, opacity: 0.95, lineCap: 'round' }).addTo(group);
+    }
+  });
+
+  // Direction arrows
+  futureSegs.forEach(seg => {
+    if (seg.length < 4) return;
+    const interval = Math.floor(seg.length / 4);
+    for (let i = interval; i < seg.length - 1; i += interval) {
+      const p1 = seg[i];
+      const p2 = seg[i + 1];
+      const angle = Math.atan2(p2[1] - p1[1], p2[0] - p1[0]) * 180 / Math.PI;
+      const arrowIcon = L.divIcon({
+        html: `<div style="
+          color:${amber};
+          font-size:14px;
+          text-shadow:0 0 6px ${amber}, 0 0 2px #000;
+          transform:rotate(${90 - angle}deg);
+          font-weight:bold;
+        ">▶</div>`,
+        iconSize: [14, 14],
+        iconAnchor: [7, 7],
+        className: '',
+      });
+      L.marker(p1, { icon: arrowIcon, interactive: false }).addTo(group);
+    }
+  });
+
+  group.addTo(map);
+  state.trackLayer = group;
+}
+
+// ============= PASS TABLE =============
+// Default to compact mode on mobile for easier scanning of many passes
+let passDisplayMode = window.innerWidth <= 900 ? 'compact' : 'detail';
+
+function fmtKSTDateOnly(d) {
+  const k = new Date(d.getTime() + 9 * 3600 * 1000);
+  return `${pad(k.getUTCMonth()+1)}/${pad(k.getUTCDate())}`;
+}
+
+function renderPassTable(passes) {
+  const tbody = document.getElementById('pass-tbody');
+  const table = document.getElementById('pass-table');
+  const theadDetail = document.getElementById('pass-thead-detail');
+  const theadCompact = document.getElementById('pass-thead-compact');
+
+  // Apply mode class — CSS handles thead visibility based on the class
+  if (passDisplayMode === 'compact') {
+    table.classList.add('compact');
+  } else {
+    table.classList.remove('compact');
+  }
+  // For desktop, also toggle inline display for the alternate thead
+  // (mobile rules override this via !important selectors)
+  if (passDisplayMode === 'compact') {
+    theadDetail.style.display = 'none';
+    theadCompact.style.display = '';
+  } else {
+    theadDetail.style.display = '';
+    theadCompact.style.display = 'none';
+  }
+
+  if (!passes.length) {
+    const colspan = passDisplayMode === 'compact' ? 7 : 8;
+    tbody.innerHTML = `<tr><td colspan="${colspan}" class="note" style="padding:18px;text-align:center;">No passes above horizon in next 72 hours.</td></tr>`;
+    return;
+  }
+  const now = Date.now();
+  const previewIdx = state.preview ? state.preview.passIndex : -1;
+
+  if (passDisplayMode === 'compact') {
+    tbody.innerHTML = passes.map((p, i) => {
+      const passing = now >= p.aos.getTime() && now <= p.los.getTime();
+      const selected = i === previewIdx;
+      const classes = [];
+      if (passing) classes.push('passing');
+      if (selected) classes.push('selected');
+      // Group by date with subtle visual separator
+      const prevDate = i > 0 ? fmtKSTDateOnly(passes[i-1].aos) : null;
+      const thisDate = fmtKSTDateOnly(p.aos);
+      const dateLabel = (i === 0 || prevDate !== thisDate) ? thisDate : '';
+      const obsColor = p.observerColor || 'var(--text-dim)';
+      const obsName = p.observerName || '—';
+      return `
+      <tr class="${classes.join(' ')}" data-pass-index="${i}" style="cursor:pointer;">
+        <td class="num-cell" data-label="#">${pad(i+1)}</td>
+        <td data-label="Obs"><span class="obs-chip" style="background:${obsColor};box-shadow:0 0 4px ${obsColor};"></span><span class="obs-name-cell">${obsName}</span></td>
+        <td data-label="Date" style="color:${dateLabel ? 'var(--cyan)' : 'var(--text-faint)'};font-weight:${dateLabel ? '500' : '300'}">${dateLabel || '〃'}</td>
+        <td data-label="AOS KST"><span style="color:var(--amber);font-weight:500;">${fmtKSTTime(p.aos)}</span></td>
+        <td data-label="LOS KST"><span style="color:var(--amber);font-weight:500;">${fmtKSTTime(p.los)}</span></td>
+        <td data-label="Max El"><span style="color:var(--cyan);font-weight:500;">${p.maxEl.toFixed(0)}°</span></td>
+        <td data-label="Dur">${fmtDuration(p.duration)}</td>
+      </tr>`;
+    }).join('');
+  } else {
+    tbody.innerHTML = passes.map((p, i) => {
+      const passing = now >= p.aos.getTime() && now <= p.los.getTime();
+      const selected = i === previewIdx;
+      const classes = [];
+      if (passing) classes.push('passing');
+      if (selected) classes.push('selected');
+      const obsColor = p.observerColor || 'var(--text-dim)';
+      const obsName = p.observerName || '—';
+      return `
+      <tr class="${classes.join(' ')}" data-pass-index="${i}" style="cursor:pointer;">
+        <td class="num num-cell" data-label="Pass">#${pad(i+1)}${passing ? ' · LIVE' : ''}</td>
+        <td data-label="Observer"><span class="obs-chip" style="background:${obsColor};box-shadow:0 0 6px ${obsColor};"></span><span class="obs-name-cell" style="color:${obsColor};font-weight:500;">${obsName}</span></td>
+        <td data-label="AOS">${fmtDateTime(p.aos, false)}<div class="small kst-line">KST ${fmtKST(p.aos)}</div></td>
+        <td data-label="AOS Az">${p.aosAz.toFixed(0)}° <span class="small">${compass(p.aosAz)}</span></td>
+        <td data-label="Max Elev"><span style="color:var(--cyan);font-weight:500;">${p.maxEl.toFixed(1)}°</span><div class="small">${fmtDateTime(p.maxElTime, false).slice(11)} <span class="kst-line">/ KST ${fmtKSTTime(p.maxElTime)}</span> · ${compass(p.maxAz)}</div></td>
+        <td data-label="LOS">${fmtDateTime(p.los, false)}<div class="small kst-line">KST ${fmtKST(p.los)}</div></td>
+        <td data-label="LOS Az">${p.losAz.toFixed(0)}° <span class="small">${compass(p.losAz)}</span></td>
+        <td data-label="Duration">${fmtDuration(p.duration)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Attach click handlers
+  tbody.querySelectorAll('tr[data-pass-index]').forEach(tr => {
+    tr.addEventListener('click', () => {
+      const idx = parseInt(tr.dataset.passIndex);
+      enterPreview(idx);
+    });
+  });
+}
+
+// ============= LIVE UPDATE / PREVIEW =============
+function liveTick() {
+  if (!state.target) return;
+  // In preview mode, the slider drives rendering; live tick only updates pass-table highlights
+  if (state.preview) {
+    if (state.passes.length) renderPassTable(state.passes);
+    return;
+  }
+  renderAtTime(new Date(), { isPreview: false });
+}
+setInterval(liveTick, 1000);
+
+function renderAtTime(when, opts = {}) {
+  if (!state.target) return;
+  // Use observer from the preview pass if previewing, else primary
+  let activeObserver = getPrimaryObserver();
+  if (opts.isPreview && opts.pass && opts.pass.observerId) {
+    const o = findObserver(opts.pass.observerId);
+    if (o) activeObserver = o;
+  }
+  const pos = getSatPosition(state.target.satrec, when, activeObserver);
+  if (!pos) return;
+
+  // Show which observer the telemetry is computed for
+  const obsLabel = document.getElementById('telemetry-observer-label');
+  if (obsLabel) {
+    obsLabel.innerHTML = `<span class="obs-chip" style="background:${activeObserver.color};"></span>${activeObserver.name}`;
+  }
+
+  document.getElementById('d-lat').textContent = `${pos.lat.toFixed(3)}°`;
+  document.getElementById('d-lon').textContent = `${pos.lon.toFixed(3)}°`;
+  document.getElementById('d-alt').innerHTML = `${pos.alt.toFixed(1)} <span class="unit">km</span>`;
+  document.getElementById('d-vel').innerHTML = `${pos.velocity.toFixed(2)} <span class="unit">km/s</span>`;
+  document.getElementById('d-az').textContent = `${pos.az.toFixed(1)}° ${compass(pos.az)}`;
+
+  const elEl = document.getElementById('d-el');
+  elEl.textContent = `${pos.el.toFixed(1)}°`;
+  elEl.className = 'data-value ' + (pos.el >= 0 ? 'green' : 'red');
+
+  document.getElementById('d-range').innerHTML = `${pos.range.toFixed(0)} <span class="unit">km</span>`;
+  const visEl = document.getElementById('d-vis');
+  if (pos.el >= 0) {
+    visEl.textContent = 'ABOVE HZN';
+    visEl.className = 'data-value green';
+  } else {
+    visEl.textContent = 'BELOW HZN';
+    visEl.className = 'data-value red';
+  }
+
+  // map marker
+  if (state.satMarker) map.removeLayer(state.satMarker);
+  state.satMarker = L.marker([pos.lat, pos.lon], { icon: satIcon() })
+    .addTo(map)
+    .bindPopup(`${state.target.name}<br>${opts.isPreview ? fmtDateTime(when) : 'LIVE'}<br>Alt: ${pos.alt.toFixed(1)} km<br>Vel: ${pos.velocity.toFixed(2)} km/s`);
+
+  // footprint
+  if (state.rangeCircle) map.removeLayer(state.rangeCircle);
+  const earthR = 6371;
+  const footRad = earthR * Math.acos(earthR / (earthR + pos.alt));
+  const cyanColor = themeColor('cyan');
+  state.rangeCircle = L.circle([pos.lat, pos.lon], {
+    radius: footRad * 1000,
+    color: cyanColor,
+    weight: 2,
+    opacity: 0.6,
+    dashArray: '6 4',
+    fillColor: cyanColor,
+    fillOpacity: 0.06,
+  }).addTo(map);
+
+  if (opts.isPreview && opts.pass) {
+    drawSkyView(pos, opts.pass, when);
+  } else {
+    drawSkyView(pos);
+  }
+
+  if (!opts.isPreview && state.passes.length) renderPassTable(state.passes);
+}
+
+// ============= PREVIEW MODE =============
+function enterPreview(passIndex) {
+  if (!state.passes[passIndex] || !state.target) return;
+  const pass = state.passes[passIndex];
+  state.preview = { passIndex, time: pass.maxElTime };
+
+  // Show preview bar
+  const bar = document.getElementById('preview-bar');
+  bar.style.display = 'flex';
+  document.getElementById('preview-num').textContent = `#${pad(passIndex + 1)} · ${state.target.name}`;
+
+  // Configure slider: 0 = AOS, 1000 = LOS, start at TCA
+  const slider = document.getElementById('preview-slider');
+  const tcaRatio = (pass.maxElTime.getTime() - pass.aos.getTime()) / (pass.los.getTime() - pass.aos.getTime());
+  slider.value = Math.round(tcaRatio * 1000);
+
+  // Draw highlighted pass segment on map
+  drawPassTrack(pass);
+
+  // Re-render to show selection in table
+  renderPassTable(state.passes);
+
+  // Update track status
+  document.getElementById('track-status').textContent = '◉ PREVIEW';
+
+  // Initial render at TCA
+  renderPreviewAt(slider.value);
+
+  // On mobile, ensure the user is on the Passes tab so they see both list + map
+  if (window.innerWidth <= 900 && window.showPane) {
+    // Only switch if currently on a tab that doesn't show the map
+    const currentMode = document.body.getAttribute('data-tab-mode');
+    if (currentMode === 'catalog') {
+      window.showPane('passes');
+    }
+  }
+
+  // Center map on pass area
+  const pv = satellite.propagate(state.target.satrec, pass.maxElTime);
+  if (pv && pv.position) {
+    const geo = satellite.eciToGeodetic(pv.position, satellite.gstime(pass.maxElTime));
+    map.setView([deg(geo.latitude), deg(geo.longitude)], 3, { animate: true });
+  }
+}
+
+function exitPreview() {
+  state.preview = null;
+  document.getElementById('preview-bar').style.display = 'none';
+  document.getElementById('track-status').textContent = '◉ TRACKING';
+  if (state.passTrackLayer) {
+    map.removeLayer(state.passTrackLayer);
+    state.passTrackLayer = null;
+  }
+  renderPassTable(state.passes);
+  renderAtTime(new Date(), { isPreview: false });
+}
+
+function renderPreviewAt(sliderValue) {
+  if (!state.preview || !state.target) return;
+  const pass = state.passes[state.preview.passIndex];
+  const ratio = sliderValue / 1000;
+  const t = pass.aos.getTime() + ratio * (pass.los.getTime() - pass.aos.getTime());
+  const when = new Date(t);
+  state.preview.time = when;
+  document.getElementById('preview-time').innerHTML = `${fmtDateTime(when, false).slice(11)} <span style="color:var(--amber);">/ KST ${fmtKSTTime(when)}</span>`;
+  renderAtTime(when, { isPreview: true, pass });
+}
+
+function drawPassTrack(pass) {
+  if (state.passTrackLayer) map.removeLayer(state.passTrackLayer);
+  if (!state.target) return;
+  // Compute ground track during the pass only (AOS to LOS)
+  const segments = [];
+  let current = [];
+  let prevLon = null;
+  const stepMs = Math.max(1000, (pass.los.getTime() - pass.aos.getTime()) / 80);
+  for (let t = pass.aos.getTime(); t <= pass.los.getTime(); t += stepMs) {
+    const d = new Date(t);
+    const pv = satellite.propagate(state.target.satrec, d);
+    if (!pv.position) continue;
+    const geo = satellite.eciToGeodetic(pv.position, satellite.gstime(d));
+    const lat = deg(geo.latitude);
+    const lon = deg(geo.longitude);
+    if (prevLon !== null && Math.abs(lon - prevLon) > 180) {
+      segments.push(current);
+      current = [];
+    }
+    current.push([lat, lon]);
+    prevLon = lon;
+  }
+  if (current.length) segments.push(current);
+
+  const group = L.layerGroup();
+  const magenta = themeColor('magenta');
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+  const coreColor = isDark ? '#ffffff' : magenta;
+  segments.forEach(seg => {
+    if (seg.length > 1) {
+      if (isDark) L.polyline(seg, { color: magenta, weight: 9, opacity: 0.2, lineCap: 'round' }).addTo(group);
+      L.polyline(seg, { color: magenta, weight: 5, opacity: 0.7, lineCap: 'round' }).addTo(group);
+      L.polyline(seg, { color: coreColor, weight: 1.8, opacity: 1, lineCap: 'round' }).addTo(group);
+    }
+  });
+
+  const greenC = themeColor('green');
+  const redC = themeColor('red');
+  const cyanC = themeColor('cyan');
+
+  // AOS marker
+  const aosPv = satellite.propagate(state.target.satrec, pass.aos);
+  if (aosPv && aosPv.position) {
+    const g = satellite.eciToGeodetic(aosPv.position, satellite.gstime(pass.aos));
+    L.marker([deg(g.latitude), deg(g.longitude)], {
+      icon: L.divIcon({
+        html: `<div style="background:${greenC};color:#000;font-size:9px;padding:2px 6px;font-family:'JetBrains Mono',monospace;font-weight:700;letter-spacing:0.1em;box-shadow:0 0 8px ${greenC};border-radius:2px;">AOS</div>`,
+        iconSize: [40, 16], iconAnchor: [20, 8], className: '',
+      })
+    }).addTo(group);
+  }
+  // LOS marker
+  const losPv = satellite.propagate(state.target.satrec, pass.los);
+  if (losPv && losPv.position) {
+    const g = satellite.eciToGeodetic(losPv.position, satellite.gstime(pass.los));
+    L.marker([deg(g.latitude), deg(g.longitude)], {
+      icon: L.divIcon({
+        html: `<div style="background:${redC};color:#000;font-size:9px;padding:2px 6px;font-family:'JetBrains Mono',monospace;font-weight:700;letter-spacing:0.1em;box-shadow:0 0 8px ${redC};border-radius:2px;">LOS</div>`,
+        iconSize: [40, 16], iconAnchor: [20, 8], className: '',
+      })
+    }).addTo(group);
+  }
+  // TCA marker
+  const tcaPv = satellite.propagate(state.target.satrec, pass.maxElTime);
+  if (tcaPv && tcaPv.position) {
+    const g = satellite.eciToGeodetic(tcaPv.position, satellite.gstime(pass.maxElTime));
+    L.marker([deg(g.latitude), deg(g.longitude)], {
+      icon: L.divIcon({
+        html: `<div style="background:${cyanC};color:#000;font-size:9px;padding:2px 6px;font-family:'JetBrains Mono',monospace;font-weight:700;letter-spacing:0.1em;box-shadow:0 0 8px ${cyanC};border-radius:2px;">TCA ${pass.maxEl.toFixed(0)}°</div>`,
+        iconSize: [60, 16], iconAnchor: [30, 8], className: '',
+      })
+    }).addTo(group);
+  }
+
+  group.addTo(map);
+  state.passTrackLayer = group;
+}
+
+// Slider + exit button handlers
+document.getElementById('preview-slider').addEventListener('input', (e) => {
+  renderPreviewAt(parseInt(e.target.value));
+});
+document.getElementById('preview-exit').addEventListener('click', exitPreview);
+
+// Pass display mode toggle (only the detail/compact buttons)
+document.querySelectorAll('.pass-mode-btn[data-pass-mode]').forEach(btn => {
+  btn.classList.toggle('active', btn.dataset.passMode === passDisplayMode);
+
+  btn.addEventListener('click', () => {
+    passDisplayMode = btn.dataset.passMode;
+    document.querySelectorAll('.pass-mode-btn[data-pass-mode]').forEach(b => {
+      b.classList.toggle('active', b.dataset.passMode === passDisplayMode);
+    });
+    const body = document.getElementById('pass-panel-body');
+    if (body) {
+      const isMobile = window.innerWidth <= 900;
+      if (isMobile) {
+        body.style.maxHeight = '';
+      } else {
+        body.style.maxHeight = passDisplayMode === 'compact' ? '60vh' : '320px';
+      }
+    }
+    renderPassTable(state.passes);
+  });
+});
+
+// ============= TIME RANGE PICKER =============
+let rangeTimezone = 'utc';  // 'utc' or 'kst'
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+// Convert Date → local datetime-local input format (YYYY-MM-DDTHH:MM) for either UTC or KST
+function dateToInputValue(date, tz) {
+  if (tz === 'kst') {
+    const k = new Date(date.getTime() + 9 * 3600 * 1000);
+    return `${k.getUTCFullYear()}-${pad2(k.getUTCMonth()+1)}-${pad2(k.getUTCDate())}T${pad2(k.getUTCHours())}:${pad2(k.getUTCMinutes())}`;
+  }
+  // UTC
+  return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth()+1)}-${pad2(date.getUTCDate())}T${pad2(date.getUTCHours())}:${pad2(date.getUTCMinutes())}`;
+}
+
+// Parse datetime-local input value back to Date (interpreting per current rangeTimezone)
+function inputValueToDate(value, tz) {
+  if (!value) return null;
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!m) return null;
+  const [_, y, mo, d, h, mi] = m;
+  if (tz === 'kst') {
+    // Input is KST → subtract 9h to get UTC
+    return new Date(Date.UTC(+y, +mo-1, +d, +h - 9, +mi));
+  }
+  return new Date(Date.UTC(+y, +mo-1, +d, +h, +mi));
+}
+
+function populateRangeInputs(start, end) {
+  document.getElementById('range-start').value = dateToInputValue(start, rangeTimezone);
+  document.getElementById('range-end').value = dateToInputValue(end, rangeTimezone);
+  document.querySelectorAll('.range-tz-label').forEach(el => {
+    el.textContent = rangeTimezone.toUpperCase();
+  });
+}
+
+function formatRangeLabel(start, end) {
+  const fmt = (d) => `${pad2(d.getUTCMonth()+1)}/${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
+  const k = (d) => new Date(d.getTime() + 9 * 3600 * 1000);
+  const kStart = k(start), kEnd = k(end);
+  return `KST ${fmt(kStart)} → ${fmt(kEnd)}`;
+}
+
+// Toggle Range bar
+document.getElementById('time-range-btn').addEventListener('click', () => {
+  const bar = document.getElementById('time-range-bar');
+  const visible = bar.style.display !== 'none';
+  if (visible) {
+    bar.style.display = 'none';
+    document.getElementById('time-range-btn').classList.remove('active');
+  } else {
+    bar.style.display = 'block';
+    document.getElementById('time-range-btn').classList.add('active');
+    // Populate with current range or defaults
+    let s, e;
+    if (state.passRange) {
+      s = state.passRange.startTime; e = state.passRange.endTime;
+    } else {
+      s = new Date();
+      e = new Date(s.getTime() + 72 * 3600 * 1000);
+    }
+    populateRangeInputs(s, e);
+  }
+});
+
+// Timezone toggle
+document.querySelectorAll('.range-mode-toggle .pass-mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const newTz = btn.dataset.rangeTz;
+    if (newTz === rangeTimezone) return;
+    // Re-read current input values in OLD tz, then re-display in new tz
+    const startD = inputValueToDate(document.getElementById('range-start').value, rangeTimezone);
+    const endD = inputValueToDate(document.getElementById('range-end').value, rangeTimezone);
+    rangeTimezone = newTz;
+    document.querySelectorAll('.range-mode-toggle .pass-mode-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.rangeTz === rangeTimezone);
+    });
+    if (startD && endD) populateRangeInputs(startD, endD);
+  });
+});
+
+// Quick range presets
+document.querySelectorAll('[data-quick-range]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const preset = btn.dataset.quickRange;
+    const now = new Date();
+    let s, e;
+    if (preset === 'today-kst') {
+      // Today 00:00 to 24:00 in KST
+      const nowKst = new Date(now.getTime() + 9 * 3600 * 1000);
+      const kstY = nowKst.getUTCFullYear(), kstM = nowKst.getUTCMonth(), kstD = nowKst.getUTCDate();
+      s = new Date(Date.UTC(kstY, kstM, kstD, 0 - 9, 0));
+      e = new Date(Date.UTC(kstY, kstM, kstD + 1, 0 - 9, 0));
+    } else if (preset === 'tomorrow-kst') {
+      const nowKst = new Date(now.getTime() + 9 * 3600 * 1000);
+      const kstY = nowKst.getUTCFullYear(), kstM = nowKst.getUTCMonth(), kstD = nowKst.getUTCDate();
+      s = new Date(Date.UTC(kstY, kstM, kstD + 1, 0 - 9, 0));
+      e = new Date(Date.UTC(kstY, kstM, kstD + 2, 0 - 9, 0));
+    } else {
+      const hours = parseInt(preset);
+      s = new Date(now);
+      e = new Date(now.getTime() + hours * 3600 * 1000);
+    }
+    populateRangeInputs(s, e);
+  });
+});
+
+// Apply custom range
+document.getElementById('range-apply').addEventListener('click', () => {
+  const startD = inputValueToDate(document.getElementById('range-start').value, rangeTimezone);
+  const endD = inputValueToDate(document.getElementById('range-end').value, rangeTimezone);
+  const status = document.getElementById('range-status');
+  status.style.display = 'block';
+  if (!startD || !endD) {
+    status.className = 'error';
+    status.textContent = '✗ Please enter both start and end times.';
+    return;
+  }
+  if (endD.getTime() <= startD.getTime()) {
+    status.className = 'error';
+    status.textContent = '✗ End time must be after start time.';
+    return;
+  }
+  const hours = (endD.getTime() - startD.getTime()) / 3600000;
+  if (hours > 30 * 24) {
+    status.className = 'error';
+    status.textContent = '✗ Range too large (max 30 days). Computation would be slow.';
+    return;
+  }
+  if (!state.target) {
+    status.className = 'error';
+    status.textContent = '✗ Load a satellite first (Sats tab).';
+    return;
+  }
+  state.passRange = {
+    startTime: startD,
+    endTime: endD,
+    label: formatRangeLabel(startD, endD),
+  };
+  status.className = 'ok';
+  status.textContent = `▸ Computing passes over ${hours.toFixed(1)}h...`;
+  // Defer to next tick so the UI shows "computing"
+  setTimeout(() => {
+    recomputePasses();
+    status.className = 'ok';
+    status.textContent = `✓ Loaded ${state.passes.length} passes over ${hours.toFixed(1)}h.`;
+  }, 30);
+});
+
+// Reset to default rolling 72h
+document.getElementById('range-reset').addEventListener('click', () => {
+  state.passRange = null;
+  document.getElementById('range-status').style.display = 'none';
+  recomputePasses();
+  // Refresh inputs to show defaults
+  const s = new Date();
+  const e = new Date(s.getTime() + 72 * 3600 * 1000);
+  populateRangeInputs(s, e);
+});
+
+// ============= CSV DOWNLOAD =============
+document.getElementById('csv-download-btn').addEventListener('click', () => {
+  if (!state.passes || !state.passes.length) {
+    alert('No passes to export. Load a satellite first.');
+    return;
+  }
+  const csv = passesToCSV(state.passes, state.target ? state.target.name : 'Unknown');
+  const satName = (state.target ? state.target.name : 'satellite').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const filename = `passes_${satName}_${stamp}.csv`;
+  downloadFile(csv, filename, 'text/csv;charset=utf-8;');
+});
+
+function csvEscape(s) {
+  if (s === null || s === undefined) return '';
+  const str = String(s);
+  if (/[",\n\r]/.test(str)) {
+    return '"' + str.replace(/"/g, '""') + '"';
+  }
+  return str;
+}
+
+function passesToCSV(passes, satName) {
+  const lines = [];
+  // Header metadata as comment-like rows (Excel-friendly)
+  lines.push(`# Satellite,${csvEscape(satName)}`);
+  if (state.target && state.target.norad) {
+    lines.push(`# NORAD ID,${csvEscape(state.target.norad)}`);
+  }
+  if (state.passRange) {
+    lines.push(`# Time Range,${csvEscape(state.passRange.startTime.toISOString())} to ${csvEscape(state.passRange.endTime.toISOString())}`);
+  } else {
+    lines.push(`# Time Range,Next 72 hours from generation time`);
+  }
+  lines.push(`# Generated,${new Date().toISOString()}`);
+  lines.push(`# Active Observers,${csvEscape(getActiveObservers().map(o => o.name).join(' | '))}`);
+  lines.push('');
+  // Column headers
+  lines.push([
+    '#', 'Observer', 'Observer Lat', 'Observer Lon', 'Observer Alt (m)',
+    'AOS UTC', 'AOS KST', 'AOS Azimuth (°)', 'AOS Compass',
+    'TCA UTC', 'TCA KST', 'Max Elevation (°)', 'TCA Azimuth (°)', 'TCA Compass',
+    'LOS UTC', 'LOS KST', 'LOS Azimuth (°)', 'LOS Compass',
+    'Duration (s)', 'Duration (mm:ss)'
+  ].map(csvEscape).join(','));
+
+  passes.forEach((p, i) => {
+    const obs = findObserver(p.observerId);
+    const aosKst = new Date(p.aos.getTime() + 9 * 3600 * 1000).toISOString().replace('Z', '+09:00');
+    const tcaKst = new Date(p.maxElTime.getTime() + 9 * 3600 * 1000).toISOString().replace('Z', '+09:00');
+    const losKst = new Date(p.los.getTime() + 9 * 3600 * 1000).toISOString().replace('Z', '+09:00');
+    const durSec = Math.round(p.duration / 1000);
+    const durMmSs = `${Math.floor(durSec / 60)}:${pad2(durSec % 60)}`;
+    lines.push([
+      i + 1,
+      p.observerName || '',
+      obs ? obs.lat.toFixed(6) : '',
+      obs ? obs.lon.toFixed(6) : '',
+      obs ? (obs.alt * 1000).toFixed(1) : '',
+      p.aos.toISOString(),
+      aosKst,
+      p.aosAz.toFixed(2),
+      compass(p.aosAz),
+      p.maxElTime.toISOString(),
+      tcaKst,
+      p.maxEl.toFixed(2),
+      p.maxAz.toFixed(2),
+      compass(p.maxAz),
+      p.los.toISOString(),
+      losKst,
+      p.losAz.toFixed(2),
+      compass(p.losAz),
+      durSec,
+      durMmSs,
+    ].map(csvEscape).join(','));
+  });
+
+  // Prepend UTF-8 BOM so Excel correctly detects encoding
+  return '\uFEFF' + lines.join('\r\n');
+}
+
+function downloadFile(content, filename, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 500);
+}
+
+// ============= SKY VIEW =============
+function drawSkyView(pos, previewPass = null, previewTime = null) {
+  const svg = document.getElementById('skyview');
+  const cx = 150, cy = 150, R = 130;
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+  const skyTop = isDark ? '#0a1420' : '#e8f0f8';
+  const skyBot = isDark ? '#050709' : '#c8d8e8';
+  const cyanT = themeColor('cyan');
+  const amberT = themeColor('amber');
+  const greenT = themeColor('green');
+  const redT = themeColor('red');
+  const magentaT = themeColor('magenta');
+  const dimT = themeColor('text-dim');
+  const faintT = themeColor('text-faint');
+  const ringT = themeColor('border-bright');
+
+  svg.innerHTML = `
+    <defs>
+      <radialGradient id="skybg" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="${skyTop}"/>
+        <stop offset="100%" stop-color="${skyBot}"/>
+      </radialGradient>
+    </defs>
+    <circle cx="${cx}" cy="${cy}" r="${R}" fill="url(#skybg)" stroke="${ringT}" stroke-width="1"/>
+    <circle cx="${cx}" cy="${cy}" r="${R*2/3}" fill="none" stroke="${ringT}" stroke-width="0.8" stroke-dasharray="2 3" opacity="0.6"/>
+    <circle cx="${cx}" cy="${cy}" r="${R/3}" fill="none" stroke="${ringT}" stroke-width="0.8" stroke-dasharray="2 3" opacity="0.6"/>
+    <line x1="${cx}" y1="${cy-R}" x2="${cx}" y2="${cy+R}" stroke="${ringT}" stroke-width="0.8" opacity="0.5"/>
+    <line x1="${cx-R}" y1="${cy}" x2="${cx+R}" y2="${cy}" stroke="${ringT}" stroke-width="0.8" opacity="0.5"/>
+    <text x="${cx}" y="${cy-R-4}" fill="${cyanT}" font-size="13" font-weight="700" font-family="JetBrains Mono" text-anchor="middle">N</text>
+    <text x="${cx+R+10}" y="${cy+5}" fill="${dimT}" font-size="11" font-family="JetBrains Mono" text-anchor="middle">E</text>
+    <text x="${cx}" y="${cy+R+14}" fill="${dimT}" font-size="11" font-family="JetBrains Mono" text-anchor="middle">S</text>
+    <text x="${cx-R-10}" y="${cy+5}" fill="${dimT}" font-size="11" font-family="JetBrains Mono" text-anchor="middle">W</text>
+    <text x="${cx+4}" y="${cy-R*2/3+10}" fill="${faintT}" font-size="9" font-family="JetBrains Mono">30°</text>
+    <text x="${cx+4}" y="${cy-R/3+10}" fill="${faintT}" font-size="9" font-family="JetBrains Mono">60°</text>
+  `;
+
+  const passToDraw = previewPass || state.passes.find(p => p.los.getTime() > Date.now());
+
+  if (passToDraw && state.target) {
+    // Use the observer associated with this pass (or primary if not specified)
+    const obs = passToDraw.observerId ? findObserver(passToDraw.observerId) : getPrimaryObserver();
+    if (!obs) return;
+    const obsGd = { longitude: rad(obs.lon), latitude: rad(obs.lat), height: obs.alt };
+    const pathPts = [];
+    for (let t = passToDraw.aos.getTime(); t <= passToDraw.los.getTime(); t += 10000) {
+      const d = new Date(t);
+      const pv = satellite.propagate(state.target.satrec, d);
+      if (!pv.position) continue;
+      const la = satellite.ecfToLookAngles(obsGd, satellite.eciToEcf(pv.position, satellite.gstime(d)));
+      const e = deg(la.elevation);
+      const a = deg(la.azimuth);
+      if (e < 0) continue;
+      const r = R * (1 - e/90);
+      const x = cx + r * Math.sin(rad(a));
+      const y = cy - r * Math.cos(rad(a));
+      pathPts.push({ x, y, t, e, a });
+    }
+
+    if (pathPts.length > 1) {
+      let pathD = '';
+      pathPts.forEach((p, i) => {
+        pathD += (i === 0 ? 'M' : 'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1);
+      });
+
+      const color = previewPass ? magentaT : amberT;
+
+      if (isDark) {
+        const glowPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        glowPath.setAttribute('d', pathD);
+        glowPath.setAttribute('fill', 'none');
+        glowPath.setAttribute('stroke', color);
+        glowPath.setAttribute('stroke-width', previewPass ? '6' : '4');
+        glowPath.setAttribute('opacity', '0.2');
+        glowPath.setAttribute('stroke-linecap', 'round');
+        svg.appendChild(glowPath);
+      }
+
+      const mainPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      mainPath.setAttribute('d', pathD);
+      mainPath.setAttribute('fill', 'none');
+      mainPath.setAttribute('stroke', color);
+      mainPath.setAttribute('stroke-width', previewPass ? '2.5' : '2');
+      mainPath.setAttribute('opacity', previewPass ? '0.95' : '0.8');
+      mainPath.setAttribute('stroke-linecap', 'round');
+      if (!previewPass) mainPath.setAttribute('stroke-dasharray', '3 2');
+      svg.appendChild(mainPath);
+
+      if (previewPass) {
+        const aosP = pathPts[0];
+        const losP = pathPts[pathPts.length - 1];
+        let tcaP = pathPts[0];
+        pathPts.forEach(p => { if (p.e > tcaP.e) tcaP = p; });
+        addSkyLabel(svg, aosP.x, aosP.y, 'AOS', greenT);
+        addSkyLabel(svg, losP.x, losP.y, 'LOS', redT);
+        addSkyLabel(svg, tcaP.x, tcaP.y, `TCA ${tcaP.e.toFixed(0)}°`, cyanT);
+      }
+    }
+  }
+
+  // current satellite dot
+  if (pos.el >= 0) {
+    const r = R * (1 - pos.el / 90);
+    const x = cx + r * Math.sin(rad(pos.az));
+    const y = cy - r * Math.cos(rad(pos.az));
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    const dotColor = previewPass ? magentaT : greenT;
+    const dotCore = isDark ? '#fff' : dotColor;
+    g.innerHTML = `
+      <circle cx="${x}" cy="${y}" r="14" fill="none" stroke="${dotColor}" stroke-width="0.8" opacity="0.4">
+        <animate attributeName="r" values="6;16;6" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.6;0;0.6" dur="2s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="${x}" cy="${y}" r="6" fill="${dotColor}" stroke="${dotCore}" stroke-width="1.5"/>
+      <circle cx="${x}" cy="${y}" r="1.8" fill="${dotCore}"/>
+      <text x="${x+10}" y="${y-9}" fill="${dotColor}" font-size="10" font-family="JetBrains Mono" font-weight="600">
+        ${state.target.name.split(' ')[0]}
+      </text>
+      <text x="${x+10}" y="${y+5}" fill="${dimT}" font-size="9" font-family="JetBrains Mono">
+        ${pos.el.toFixed(1)}° · ${compass(pos.az)}
+      </text>
+    `;
+    svg.appendChild(g);
+  } else {
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    t.setAttribute('x', cx);
+    t.setAttribute('y', cy + 4);
+    t.setAttribute('fill', redT);
+    t.setAttribute('font-size', '11');
+    t.setAttribute('font-family', 'JetBrains Mono');
+    t.setAttribute('text-anchor', 'middle');
+    t.setAttribute('font-weight', '600');
+    t.textContent = 'BELOW HORIZON';
+    svg.appendChild(t);
+  }
+}
+
+function addSkyLabel(svg, x, y, text, color) {
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  // Background rect
+  const charW = 5.5;
+  const w = text.length * charW + 8;
+  g.innerHTML = `
+    <circle cx="${x}" cy="${y}" r="4" fill="${color}" stroke="#000" stroke-width="0.5"/>
+    <rect x="${x - w/2}" y="${y + 6}" width="${w}" height="11" fill="${color}" rx="1"/>
+    <text x="${x}" y="${y + 14}" fill="#000" font-size="8" font-family="JetBrains Mono" font-weight="700" text-anchor="middle">${text}</text>
+  `;
+  svg.appendChild(g);
+}
+drawSkyView({ el: -90, az: 0 });
+
+// ============= CELESTRAK FETCH =============
+async function tryFetch(urls) {
+  let lastErr;
+  for (const url of urls) {
+    try {
+      const resp = await fetch(url, { mode: 'cors' });
+      if (!resp.ok) { lastErr = new Error(`HTTP ${resp.status}`); continue; }
+      const text = await resp.text();
+      if (text && text.length > 50) return text;
+      lastErr = new Error('Empty response');
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error('All endpoints failed');
+}
+
+// Featured satellites (NORAD IDs) loaded by default
+const FEATURED_SATS = [
+  { name: 'NEONSAT-1',   norad: '59587' },
+  { name: 'NEONSAT-1A',  norad: '67614' },
+  { name: 'SPACEEYE-T1', norad: '63229' },
+  { name: 'ETIHAD-SAT',  norad: '63226' },
+];
+
+async function fetchByNoradList(satList) {
+  const results = [];
+  await Promise.all(satList.map(async (s) => {
+    try {
+      const base = `https://celestrak.org/NORAD/elements/gp.php?CATNR=${s.norad}&FORMAT=tle`;
+      const text = await tryFetch([
+        base,
+        `https://corsproxy.io/?${encodeURIComponent(base)}`,
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(base)}`,
+        `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(base)}`,
+      ]);
+      if (/no gp data found/i.test(text) || text.trim().length < 50) return;
+      const parsed = parseTLE(text);
+      if (parsed.length) results.push(parsed[0]);
+    } catch (_) { /* skip this one, continue with others */ }
+  }));
+  // Preserve the order from FEATURED_SATS
+  const sorted = [];
+  for (const s of satList) {
+    const found = results.find(r => r.norad === s.norad);
+    if (found) sorted.push(found);
+  }
+  return sorted;
+}
+
+async function fetchCelestrak(group) {
+  const status = document.getElementById('catalog-status');
+  status.className = 'note';
+
+  // Special handling for the "preset" featured group — fetch by NORAD ID list
+  if (group === 'preset') {
+    status.textContent = `▸ Fetching featured satellites (NEONSAT, SPACEEYE, ETIHAD-SAT)...`;
+    try {
+      const sats = await fetchByNoradList(FEATURED_SATS);
+      if (!sats.length) throw new Error('Could not fetch any featured satellites');
+      state.catalog = sats;
+      renderCatalog(sats);
+      status.className = 'ok';
+      const missing = FEATURED_SATS.length - sats.length;
+      status.textContent = missing > 0
+        ? `✓ Loaded ${sats.length}/${FEATURED_SATS.length} featured satellites (${missing} unavailable).`
+        : `✓ Loaded ${sats.length} featured satellites.`;
+    } catch (e) {
+      status.className = 'error';
+      status.innerHTML = `✗ Fetch failed: ${e.message}.<br>Try a different group, paste a TLE manually, or use Auto-fetch by name.`;
+    }
+    return;
+  }
+
+  status.textContent = `▸ Fetching ${group} catalog from CelesTrak...`;
+  try {
+    const direct = `https://celestrak.org/NORAD/elements/gp.php?GROUP=${encodeURIComponent(group)}&FORMAT=tle`;
+    const urls = [
+      direct,
+      `https://corsproxy.io/?${encodeURIComponent(direct)}`,
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(direct)}`,
+      `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(direct)}`,
+      `https://proxy.cors.sh/${direct}`,
+      `https://thingproxy.freeboard.io/fetch/${direct}`,
+    ];
+    const text = await tryFetch(urls);
+    const lines = text.trim().split(/\r?\n/);
+    const sats = [];
+    for (let i = 0; i < lines.length - 2; i += 3) {
+      const name = lines[i].trim();
+      const l1 = lines[i+1].trim();
+      const l2 = lines[i+2].trim();
+      if (!l1.startsWith('1 ') || !l2.startsWith('2 ')) continue;
+      sats.push({ name, l1, l2, norad: extractNorad(l1) });
+    }
+    if (!sats.length) throw new Error('No valid TLE entries parsed');
+    state.catalog = sats;
+    renderCatalog(sats);
+    status.className = 'ok';
+    status.textContent = `✓ Loaded ${sats.length} satellites from group "${group}".`;
+  } catch (e) {
+    status.className = 'error';
+    status.innerHTML = `✗ Fetch failed: ${e.message}.<br>Loading built-in sample (ISS) instead. You can also paste a TLE manually.`;
+    loadFallbackSamples();
+  }
+}
+
+function loadFallbackSamples() {
+  // Known recent TLEs as a fallback when network is unavailable.
+  // These may be stale — for accurate predictions, use manual TLE input.
+  const samples = [
+    {
+      name: 'ISS (ZARYA)',
+      l1: '1 25544U 98067A   25001.50000000  .00016717  00000+0  10270-3 0  9994',
+      l2: '2 25544  51.6400 100.0000 0006703  90.0000 270.0000 15.50000000400000',
+      norad: '25544'
+    },
+    {
+      name: 'CSS (TIANHE)',
+      l1: '1 48274U 21035A   25001.50000000  .00012345  00000+0  20000-3 0  9990',
+      l2: '2 48274  41.4700 200.0000 0005000 100.0000 260.0000 15.60000000200000',
+      norad: '48274'
+    },
+    {
+      name: 'HUBBLE SPACE TELESCOPE',
+      l1: '1 20580U 90037B   25001.50000000  .00001500  00000+0  10000-4 0  9995',
+      l2: '2 20580  28.4700 150.0000 0002800  90.0000 270.0000 15.10000000400000',
+      norad: '20580'
+    },
+    {
+      name: 'NOAA 19',
+      l1: '1 33591U 09005A   25001.50000000  .00000200  00000+0  15000-3 0  9999',
+      l2: '2 33591  99.1900  50.0000 0014000  90.0000 270.0000 14.13000000800000',
+      norad: '33591'
+    },
+  ];
+  state.catalog = samples;
+  renderCatalog(samples);
+  const status = document.getElementById('catalog-status');
+  status.innerHTML += `<br><span style="color:var(--amber);">⚠ Sample TLEs may be outdated. For real-time accuracy, paste fresh TLE from celestrak.org or n2yo.com.</span>`;
+}
+
+function renderCatalog(sats) {
+  const list = document.getElementById('sat-list');
+  list.style.display = 'block';
+  list.innerHTML = sats.map(s =>
+    `<div class="sat-item" data-name="${cssEscape(s.name)}" data-l1="${s.l1}" data-l2="${s.l2}" data-norad="${s.norad}">
+      <span class="name">${s.name}</span>
+      <span class="id">${s.norad}</span>
+    </div>`
+  ).join('');
+  list.querySelectorAll('.sat-item').forEach(el => {
+    el.addEventListener('click', () => {
+      setTarget(el.dataset.name, el.dataset.l1, el.dataset.l2, el.dataset.norad);
+    });
+  });
+}
+
+// ============= EVENTS =============
+document.getElementById('load-celestrak').addEventListener('click', () => {
+  fetchCelestrak(document.getElementById('celestrak-group').value);
+});
+
+document.getElementById('load-tle').addEventListener('click', () => {
+  const name = document.getElementById('tle-name').value.trim() || 'UNNAMED SAT';
+  const l1 = document.getElementById('tle-l1').value.trim();
+  const l2 = document.getElementById('tle-l2').value.trim();
+  if (!l1 || !l2) {
+    showError('Both TLE lines required. Use Auto-fetch to populate by name.');
+    return;
+  }
+  setTarget(name, l1, l2);
+});
+
+// ============= AUTO-FETCH TLE BY NAME OR NORAD ID =============
+document.getElementById('auto-fetch-tle').addEventListener('click', autoFetchTLE);
+document.getElementById('tle-name').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); autoFetchTLE(); }
+});
+
+// Search across multiple CelesTrak groups when name search fails
+const SEARCH_GROUPS = [
+  'stations', 'active', 'visual', 'weather', 'noaa', 'goes',
+  'gps-ops', 'galileo', 'glo-ops', 'beidou', 'starlink', 'oneweb',
+  'amateur', 'cubesat', 'science', 'geo', 'iridium', 'iridium-NEXT',
+  'planet', 'spire', 'last-30-days', 'tle-new'
+];
+
+async function autoFetchTLE() {
+  const query = document.getElementById('tle-name').value.trim();
+  const statusEl = document.getElementById('auto-fetch-status');
+  statusEl.style.display = 'block';
+
+  if (!query) {
+    statusEl.className = 'error';
+    statusEl.textContent = '✗ Enter a satellite name or NORAD ID.';
+    return;
+  }
+
+  const isNorad = /^\d+$/.test(query);
+  const qUpper = query.toUpperCase();
+
+  // STEP 1: Search the currently loaded catalog first (instant, offline-capable)
+  if (state.catalog && state.catalog.length) {
+    const localMatches = state.catalog.filter(s =>
+      isNorad ? s.norad === query : s.name.toUpperCase().includes(qUpper)
+    );
+    if (localMatches.length) {
+      statusEl.className = 'ok';
+      statusEl.textContent = `✓ Found ${localMatches.length} match(es) in loaded catalog (no network needed).`;
+      if (localMatches.length === 1) {
+        const r = localMatches[0];
+        document.getElementById('tle-name').value = r.name;
+        document.getElementById('tle-l1').value = r.l1;
+        document.getElementById('tle-l2').value = r.l2;
+        setTarget(r.name, r.l1, r.l2, r.norad);
+      } else {
+        showSearchResults(localMatches, statusEl);
+      }
+      return;
+    }
+  }
+
+  // STEP 2: Try CelesTrak via multiple endpoints
+  statusEl.className = 'note';
+  statusEl.textContent = `▸ Searching CelesTrak online for "${query}"...`;
+
+  const baseUrl = isNorad
+    ? `https://celestrak.org/NORAD/elements/gp.php?CATNR=${query}&FORMAT=tle`
+    : `https://celestrak.org/NORAD/elements/gp.php?NAME=${encodeURIComponent(query)}&FORMAT=tle`;
+
+  const urls = [
+    baseUrl,
+    `https://corsproxy.io/?${encodeURIComponent(baseUrl)}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(baseUrl)}`,
+    `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(baseUrl)}`,
+    `https://proxy.cors.sh/${baseUrl}`,
+    `https://cors-anywhere.herokuapp.com/${baseUrl}`,
+    `https://thingproxy.freeboard.io/fetch/${baseUrl}`,
+  ];
+
+  try {
+    const text = await tryFetch(urls);
+    if (/no gp data found/i.test(text) || text.trim().length < 50) {
+      throw new Error('No matching satellite on CelesTrak.');
+    }
+    const results = parseTLE(text);
+    if (!results.length) throw new Error('Parsed 0 valid TLE entries.');
+    handleSearchResults(results, statusEl);
+    return;
+  } catch (e) {
+    // STEP 3: Fall back to searching across pre-loaded popular groups
+    statusEl.className = 'note';
+    statusEl.textContent = `▸ Online search failed. Scanning popular catalogs for "${query}"...`;
+    try {
+      const found = await searchAcrossGroups(query, isNorad, qUpper);
+      if (found.length) {
+        statusEl.className = 'ok';
+        statusEl.textContent = `✓ Found ${found.length} match(es) by scanning catalogs.`;
+        handleSearchResults(found, statusEl);
+        return;
+      }
+      throw new Error('Not found in any reachable catalog.');
+    } catch (e2) {
+      statusEl.className = 'error';
+      statusEl.innerHTML = `✗ ${e2.message}<br>
+        <span style="color:var(--text-dim);font-size:10px;line-height:1.5;display:block;margin-top:6px;">
+          • Try loading a catalog group first (left panel) — then search within it.<br>
+          • Or visit <span style="color:var(--cyan);">celestrak.org</span> and paste the TLE manually.<br>
+          • Network may be blocking external requests entirely.
+        </span>`;
+    }
+  }
+}
+
+function parseTLE(text) {
+  const lines = text.trim().split(/\r?\n/);
+  const results = [];
+  for (let i = 0; i < lines.length - 2; i += 3) {
+    const name = lines[i].trim();
+    const l1 = lines[i+1].trim();
+    const l2 = lines[i+2].trim();
+    if (!l1.startsWith('1 ') || !l2.startsWith('2 ')) continue;
+    results.push({ name, l1, l2, norad: extractNorad(l1) });
+  }
+  return results;
+}
+
+async function searchAcrossGroups(query, isNorad, qUpper) {
+  const allFound = [];
+  const seen = new Set();
+  for (const group of SEARCH_GROUPS) {
+    try {
+      const url = `https://celestrak.org/NORAD/elements/gp.php?GROUP=${group}&FORMAT=tle`;
+      const text = await tryFetch([
+        url,
+        `https://corsproxy.io/?${encodeURIComponent(url)}`,
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+      ]);
+      const parsed = parseTLE(text);
+      for (const s of parsed) {
+        if (seen.has(s.norad)) continue;
+        const hit = isNorad ? s.norad === query : s.name.toUpperCase().includes(qUpper);
+        if (hit) {
+          allFound.push(s);
+          seen.add(s.norad);
+          if (allFound.length >= 50) return allFound;
+        }
+      }
+    } catch (_) { /* try next group */ }
+  }
+  return allFound;
+}
+
+function handleSearchResults(results, statusEl) {
+  if (results.length === 1) {
+    const r = results[0];
+    document.getElementById('tle-name').value = r.name;
+    document.getElementById('tle-l1').value = r.l1;
+    document.getElementById('tle-l2').value = r.l2;
+    statusEl.className = 'ok';
+    statusEl.textContent = `✓ Found: ${r.name} (NORAD ${r.norad}). Tracking now.`;
+    setTarget(r.name, r.l1, r.l2, r.norad);
+  } else {
+    statusEl.className = 'ok';
+    statusEl.innerHTML = `✓ Found ${results.length} matches. Select one:`;
+    showSearchResults(results, statusEl);
+  }
+}
+
+function showSearchResults(results, statusEl) {
+  // Cap display to avoid massive lists (e.g. "STARLINK" matches thousands)
+  const capped = results.slice(0, 100);
+  const note = results.length > 100
+    ? `<div style="color:var(--amber);font-size:10px;padding:4px 0;">Showing first 100 of ${results.length}. Refine your search for more.</div>`
+    : '';
+  const listHtml = `
+    ${note}
+    <div class="sat-list" style="margin-top:6px;max-height:200px;">
+      ${capped.map(r => `
+        <div class="sat-item search-result"
+             data-name="${cssEscape(r.name)}"
+             data-l1="${r.l1}"
+             data-l2="${r.l2}"
+             data-norad="${r.norad}">
+          <span class="name">${r.name}</span>
+          <span class="id">${r.norad}</span>
+        </div>
+      `).join('')}
+    </div>`;
+  statusEl.innerHTML = `✓ Found ${results.length} matches. Select one:` + listHtml;
+
+  statusEl.querySelectorAll('.search-result').forEach(el => {
+    el.addEventListener('click', () => {
+      document.getElementById('tle-name').value = el.dataset.name;
+      document.getElementById('tle-l1').value = el.dataset.l1;
+      document.getElementById('tle-l2').value = el.dataset.l2;
+      setTarget(el.dataset.name, el.dataset.l1, el.dataset.l2, el.dataset.norad);
+      statusEl.className = 'ok';
+      statusEl.textContent = `✓ Tracking ${el.dataset.name} (NORAD ${el.dataset.norad}).`;
+    });
+  });
+}
+
+// ============= OBSERVER MANAGEMENT =============
+let editingObserverId = null;  // null = adding new; else editing existing
+
+function renderObserverList() {
+  const list = document.getElementById('observer-list');
+  if (!list) return;
+  document.getElementById('observer-count').textContent =
+    `${getActiveObservers().length}/${state.observers.length} ACTIVE`;
+
+  if (!state.observers.length) {
+    list.innerHTML = `<div class="note">No observers. Add one to compute passes.</div>`;
+    return;
+  }
+
+  list.innerHTML = state.observers.map(obs => {
+    const isPrimary = obs.id === state.primaryObserverId;
+    const classes = ['observer-item'];
+    if (isPrimary) classes.push('primary');
+    if (!obs.active) classes.push('inactive');
+    return `
+      <div class="${classes.join(' ')}" data-obs-id="${obs.id}" style="border-left-color:${obs.color};">
+        <input type="checkbox" class="observer-checkbox" data-action="toggle" ${obs.active ? 'checked' : ''} title="Include in pass predictions">
+        <div class="observer-info" data-action="set-primary">
+          <div class="observer-name">${obs.name}${isPrimary ? '<span class="observer-badge-primary">PRIMARY</span>' : ''}</div>
+          <div class="observer-coords">${obs.lat.toFixed(3)}°, ${obs.lon.toFixed(3)}° · ${(obs.alt*1000).toFixed(0)}m</div>
+        </div>
+        <div class="observer-actions">
+          <button class="observer-btn" data-action="edit" title="Edit">✎</button>
+          <button class="observer-btn danger" data-action="delete" title="Delete">✕</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  list.querySelectorAll('.observer-item').forEach(item => {
+    const obsId = item.dataset.obsId;
+    item.querySelector('[data-action="toggle"]').addEventListener('change', (e) => {
+      e.stopPropagation();
+      toggleObserver(obsId, e.target.checked);
+    });
+    item.querySelector('[data-action="set-primary"]').addEventListener('click', () => {
+      setPrimaryObserver(obsId);
+    });
+    item.querySelector('[data-action="edit"]').addEventListener('click', (e) => {
+      e.stopPropagation();
+      openObserverEditor(obsId);
+    });
+    item.querySelector('[data-action="delete"]').addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteObserver(obsId);
+    });
+  });
+}
+
+function toggleObserver(id, active) {
+  const obs = findObserver(id);
+  if (!obs) return;
+  obs.active = active;
+  if (!active && state.primaryObserverId === id) {
+    const firstActive = getActiveObservers()[0];
+    if (firstActive) state.primaryObserverId = firstActive.id;
+  }
+  saveObserversToStorage();
+  renderObserverList();
+  refreshObserverMarkers();
+  recomputePasses();
+}
+
+function setPrimaryObserver(id) {
+  const obs = findObserver(id);
+  if (!obs) return;
+  if (!obs.active) obs.active = true;
+  state.primaryObserverId = id;
+  saveObserversToStorage();
+  renderObserverList();
+  refreshObserverMarkers();
+  if (state.target) renderAtTime(new Date(), { isPreview: false });
+}
+
+function deleteObserver(id) {
+  if (state.observers.length <= 1) {
+    alert('At least one observer is required.');
+    return;
+  }
+  const obs = findObserver(id);
+  if (!obs) return;
+  if (!confirm(`Delete observer "${obs.name}"?`)) return;
+  state.observers = state.observers.filter(o => o.id !== id);
+  if (state.primaryObserverId === id) {
+    state.primaryObserverId = state.observers[0].id;
+  }
+  saveObserversToStorage();
+  renderObserverList();
+  refreshObserverMarkers();
+  recomputePasses();
+}
+
+function openObserverEditor(id) {
+  editingObserverId = id;
+  const obs = id ? findObserver(id) : null;
+  const editor = document.getElementById('observer-editor');
+  editor.style.display = '';
+  document.getElementById('observer-editor-title').textContent = obs ? `▸ Edit: ${obs.name}` : '▸ New Observer';
+  document.getElementById('obs-name').value = obs ? obs.name : '';
+  document.getElementById('obs-lat').value = obs ? obs.lat : 36.3504;
+  document.getElementById('obs-lon').value = obs ? obs.lon : 127.3845;
+  document.getElementById('obs-alt').value = obs ? Math.round(obs.alt * 1000) : 50;
+  editor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  document.getElementById('obs-name').focus();
+}
+
+function closeObserverEditor() {
+  editingObserverId = null;
+  document.getElementById('observer-editor').style.display = 'none';
+}
+
+function saveObserverFromEditor() {
+  const name = document.getElementById('obs-name').value.trim() || 'Unnamed';
+  const lat = parseFloat(document.getElementById('obs-lat').value);
+  const lon = parseFloat(document.getElementById('obs-lon').value);
+  const altMeters = parseFloat(document.getElementById('obs-alt').value) || 0;
+  if (isNaN(lat) || isNaN(lon)) {
+    alert('Latitude and longitude are required.');
+    return;
+  }
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+    alert('Invalid coordinates.');
+    return;
+  }
+  if (editingObserverId) {
+    const obs = findObserver(editingObserverId);
+    obs.name = name;
+    obs.lat = lat;
+    obs.lon = lon;
+    obs.alt = altMeters / 1000;
+  } else {
+    const id = 'obs-' + Date.now();
+    state.observers.push({
+      id, name, lat, lon, alt: altMeters / 1000,
+      active: true, color: nextObserverColor()
+    });
+    if (state.observers.length === 1) state.primaryObserverId = id;
+  }
+  saveObserversToStorage();
+  closeObserverEditor();
+  renderObserverList();
+  refreshObserverMarkers();
+  recomputePasses();
+}
+
+function recomputePasses() {
+  if (!state.target) return;
+  state.passes = predictAllPasses(state.target.satrec, getPassPredictionOptions(), 0);
+  renderPassTable(state.passes);
+  document.getElementById('pass-count').textContent = `${state.passes.length} PASSES · ${getActiveObservers().length} OBS`;
+  updatePassPanelTitle();
+}
+
+document.getElementById('add-observer-btn').addEventListener('click', () => openObserverEditor(null));
+document.getElementById('obs-save').addEventListener('click', saveObserverFromEditor);
+document.getElementById('obs-cancel').addEventListener('click', closeObserverEditor);
+document.getElementById('observer-editor-close').addEventListener('click', closeObserverEditor);
+
+document.getElementById('reset-observers-btn').addEventListener('click', () => {
+  if (!confirm('Clear all observers and restore the default? This will remove saved observers from this browser.')) return;
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(PRIMARY_KEY);
+  } catch (e) {}
+  state.observers = DEFAULT_OBSERVERS.map(o => ({ ...o }));
+  state.primaryObserverId = state.observers[0].id;
+  saveObserversToStorage();
+  renderObserverList();
+  refreshObserverMarkers();
+  recomputePasses();
+});
+
+document.getElementById('geo-btn').addEventListener('click', () => {
+  if (!navigator.geolocation) { alert('Geolocation not supported.'); return; }
+  navigator.geolocation.getCurrentPosition(pos => {
+    document.getElementById('obs-lat').value = pos.coords.latitude.toFixed(4);
+    document.getElementById('obs-lon').value = pos.coords.longitude.toFixed(4);
+    document.getElementById('obs-alt').value = Math.round(pos.coords.altitude || 0);
+    if (!document.getElementById('obs-name').value.trim()) {
+      document.getElementById('obs-name').value = 'My Location';
+    }
+  }, err => alert(`Geolocation error: ${err.message}`));
+});
+
+function showError(msg) {
+  const status = document.getElementById('catalog-status');
+  status.className = 'error';
+  status.textContent = `✗ ${msg}`;
+}
+
+// ============= AUTO-LOAD FEATURED SATELLITES =============
+fetchCelestrak('preset');
+
+} // end initApp
+
+bootstrap();
+</script>
+
+</body>
+</html>
