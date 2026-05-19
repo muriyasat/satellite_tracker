@@ -1258,6 +1258,14 @@
           <div class="legend-dot" style="background:transparent;border:2px solid #00e5ff;box-shadow:0 0 6px #00e5ff;"></div>
           <span>Observer</span>
         </div>
+        <div class="legend-row">
+          <div class="legend-dot" style="background:#ffeb3b;box-shadow:0 0 8px #ffeb3b;"></div>
+          <span>Subsolar point ☀</span>
+        </div>
+        <div class="legend-row" style="cursor:pointer;" id="night-toggle" title="Toggle day/night overlay">
+          <div class="legend-swatch" style="background:rgba(10,20,60,0.5);border:1px dashed #4a5a90;"></div>
+          <span id="night-toggle-label">Night side ◐</span>
+        </div>
       </div>
     </div>
     <div class="footer-bar">
@@ -1317,6 +1325,14 @@
         <div class="data-cell">
           <div class="data-label">Visibility</div>
           <div class="data-value" id="d-vis">—</div>
+        </div>
+        <div class="data-cell">
+          <div class="data-label">Sat Illumination</div>
+          <div class="data-value" id="d-sunlit">—</div>
+        </div>
+        <div class="data-cell">
+          <div class="data-label">Sun @ Observer</div>
+          <div class="data-value" id="d-sunel">—</div>
         </div>
       </div>
     </div>
@@ -1401,6 +1417,7 @@
               <th>LOS · <span style="color:var(--cyan)">UTC</span> / <span style="color:var(--amber)">KST</span></th>
               <th>Az</th>
               <th>Duration</th>
+              <th title="Optical visibility: ☀=sunlit at TCA, ◐=eclipse, ◉=naked-eye visible">Illum</th>
             </tr>
           </thead>
           <thead id="pass-thead-compact" style="display:none;">
@@ -1413,6 +1430,7 @@
               <th>LOS <span style="color:var(--amber)">KST</span></th>
               <th>Max El</th>
               <th>Dur</th>
+              <th title="Optical visibility">Vis</th>
             </tr>
           </thead>
           <thead id="pass-thead-multi" style="display:none;">
@@ -1426,7 +1444,7 @@
             </tr>
           </thead>
           <tbody id="pass-tbody">
-            <tr><td colspan="9" class="note" style="padding:18px;text-align:center;">No active target. Load a satellite to compute passes.</td></tr>
+            <tr><td colspan="10" class="note" style="padding:18px;text-align:center;">No active target. Load a satellite to compute passes.</td></tr>
           </tbody>
         </table>
       </div>
@@ -1689,6 +1707,10 @@ const state = {
   passRange: null,
   // Markers for all active satellites (besides primary target)
   allSatMarkers: {},  // map of sat key → marker
+  // Night/terminator overlay
+  nightLayer: null,
+  nightUpdateInterval: null,
+  showNight: true,  // toggleable
 };
 
 // Validate primary observer id
@@ -1857,9 +1879,26 @@ function refreshObserverMarker() {
 refreshObserverMarkers();
 renderObserverList();
 
+// Initial night/day overlay
+refreshNightLayer();
+// Auto-update night layer every 60 seconds (subsolar point moves ~0.25°/min)
+state.nightUpdateInterval = setInterval(() => {
+  if (!state.preview) refreshNightLayer();
+}, 60000);
+
+// Night overlay toggle (in map legend)
+document.getElementById('night-toggle').addEventListener('click', () => {
+  state.showNight = !state.showNight;
+  const label = document.getElementById('night-toggle-label');
+  label.textContent = state.showNight ? 'Night side ◐' : 'Night side (off)';
+  label.style.opacity = state.showNight ? '1' : '0.5';
+  refreshNightLayer(state.preview ? state.preview.time : new Date());
+});
+
 // Expose refresh helper for theme switcher to call after color change
 window._refreshVisuals = function() {
   refreshObserverMarkers();
+  refreshNightLayer(state.preview ? state.preview.time : new Date());
   if (state.target) {
     drawGroundTrack();
     if (state.preview) {
@@ -1875,6 +1914,194 @@ window._refreshVisuals = function() {
 };
 
 // ============= SATELLITE COMPUTATION =============
+// ============= SUN POSITION & ECLIPSE =============
+// Compute Sun position in ECI coordinates (km), low-precision algorithm sufficient for sat-eclipse calc
+// Accurate to ~0.01° which is way better than we need (Earth shadow boundary error ~1 km at LEO altitudes)
+function sunPositionECI(date) {
+  // Julian date
+  const JD = date.getTime() / 86400000 + 2440587.5;
+  const n = JD - 2451545.0;  // Days since J2000
+  const L = (280.460 + 0.9856474 * n) % 360;       // Mean longitude (deg)
+  const g = rad((357.528 + 0.9856003 * n) % 360);  // Mean anomaly (rad)
+  const lambda = rad(L + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g));  // Ecliptic longitude
+  const epsilon = rad(23.439 - 0.0000004 * n);      // Obliquity of the ecliptic
+  // Sun distance in AU (approx)
+  const R = 1.00014 - 0.01671 * Math.cos(g) - 0.00014 * Math.cos(2 * g);
+  const AU_KM = 149597870.7;
+  const r = R * AU_KM;
+  // Sun position in ECI (equatorial) — note J2000 vs current epoch is negligible here
+  return {
+    x: r * Math.cos(lambda),
+    y: r * Math.cos(epsilon) * Math.sin(lambda),
+    z: r * Math.sin(epsilon) * Math.sin(lambda),
+  };
+}
+
+// Determine if a satellite at the given ECI position is in Earth's shadow.
+// Uses cylindrical shadow model (umbra), accurate enough for visibility prediction at LEO/MEO.
+// Returns: { illuminated: boolean, condition: 'sunlit'|'umbra'|'penumbra', sunSatAngle: deg }
+// Subsolar point: latitude/longitude on Earth where the Sun is directly overhead
+function subsolarPoint(date) {
+  const sun = sunPositionECI(date);
+  const rSun = Math.sqrt(sun.x*sun.x + sun.y*sun.y + sun.z*sun.z);
+  const decl = Math.asin(sun.z / rSun);
+  const ra = Math.atan2(sun.y, sun.x);
+  const gmst = satellite.gstime(date);
+  let lon = ra - gmst;
+  while (lon > Math.PI) lon -= 2 * Math.PI;
+  while (lon < -Math.PI) lon += 2 * Math.PI;
+  return { lat: deg(decl), lon: deg(lon) };
+}
+
+// Render the night-side overlay on the map
+function refreshNightLayer(date) {
+  if (state.nightLayer) {
+    map.removeLayer(state.nightLayer);
+    state.nightLayer = null;
+  }
+  if (!state.showNight) return;
+
+  date = date || new Date();
+  const ss = subsolarPoint(date);
+  const phi_s = rad(ss.lat);
+  const lon_s = ss.lon;
+
+  // For each longitude lon, the terminator latitude satisfies:
+  //   sin(phi_s)sin(phi_t) + cos(phi_s)cos(phi_t)cos(lon - lon_s) = 0
+  // => tan(phi_t) = -cos(lon - lon_s) / tan(phi_s)
+  // Determine which pole is dark
+  const darkPoleLat = ss.lat >= 0 ? -90 : 90;
+
+  // Sample longitudes finely
+  const polyPoints = [];
+  for (let lon = -180; lon <= 180; lon += 1) {
+    const dlon = rad(lon - lon_s);
+    let tLat;
+    if (Math.abs(phi_s) < 1e-4) {
+      // Equinox: terminator is along longitudes lon_s±90°
+      // Skip — handled by fallback below
+      polyPoints.push(null);
+      continue;
+    }
+    const tan_phi_t = -Math.cos(dlon) / Math.tan(phi_s);
+    tLat = deg(Math.atan(tan_phi_t));
+    polyPoints.push([tLat, lon]);
+  }
+
+  // Equinox fallback: simple rectangle covering 180° of longitudes
+  let nightPoly;
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+  const fillColor = isDark ? '#000010' : '#1a2040';
+  const fillOpacity = isDark ? 0.38 : 0.22;
+  const strokeColor = isDark ? '#2a3a60' : '#4a5a90';
+
+  if (polyPoints.every(p => p === null)) {
+    // Equinox special case
+    let darkLonMin = lon_s + 90;
+    let darkLonMax = lon_s + 270;
+    while (darkLonMin > 180) darkLonMin -= 360;
+    while (darkLonMax > 180) darkLonMax -= 360;
+    const eqPoly = [[90, darkLonMin], [90, darkLonMax], [-90, darkLonMax], [-90, darkLonMin]];
+    nightPoly = L.polygon(eqPoly, {
+      color: strokeColor, weight: 1.2, opacity: 0.5,
+      fillColor, fillOpacity, interactive: false,
+    });
+  } else {
+    // Build polygon: walk terminator W→E, then close along the dark pole
+    const validPts = polyPoints.filter(p => p !== null);
+    const firstLon = validPts[0][1];
+    const lastLon = validPts[validPts.length - 1][1];
+    const closed = [...validPts, [darkPoleLat, lastLon], [darkPoleLat, firstLon]];
+    nightPoly = L.polygon(closed, {
+      color: strokeColor, weight: 1.2, opacity: 0.55,
+      fillColor, fillOpacity, interactive: false,
+      smoothFactor: 1,
+    });
+  }
+
+  const grp = L.layerGroup();
+  nightPoly.addTo(grp);
+
+  // Subsolar sun marker
+  const sunMarker = L.marker([ss.lat, ss.lon], {
+    icon: L.divIcon({
+      html: `<svg width="28" height="28" viewBox="0 0 28 28" style="filter:drop-shadow(0 0 8px #ffeb3b);">
+        <circle cx="14" cy="14" r="6" fill="#ffeb3b" stroke="#fff" stroke-width="1">
+          <animate attributeName="r" values="5;7;5" dur="3s" repeatCount="indefinite"/>
+        </circle>
+        <g stroke="#ffeb3b" stroke-width="1.5" stroke-linecap="round" opacity="0.9">
+          <line x1="14" y1="1" x2="14" y2="5"/>
+          <line x1="14" y1="23" x2="14" y2="27"/>
+          <line x1="1" y1="14" x2="5" y2="14"/>
+          <line x1="23" y1="14" x2="27" y2="14"/>
+          <line x1="4.5" y1="4.5" x2="7.5" y2="7.5"/>
+          <line x1="20.5" y1="20.5" x2="23.5" y2="23.5"/>
+          <line x1="4.5" y1="23.5" x2="7.5" y2="20.5"/>
+          <line x1="20.5" y1="7.5" x2="23.5" y2="4.5"/>
+        </g>
+      </svg>`,
+      iconSize: [28, 28], iconAnchor: [14, 14], className: '',
+    }),
+  }).bindPopup(`<b>☀ Subsolar Point</b><br>Sun is directly overhead here<br>${ss.lat.toFixed(2)}°N, ${ss.lon.toFixed(2)}°E`);
+  sunMarker.addTo(grp);
+
+  grp.addTo(map);
+  state.nightLayer = grp;
+  if (nightPoly.bringToBack) nightPoly.bringToBack();
+}
+
+function satelliteIlluminationState(satEci, date) {
+  const sun = sunPositionECI(date);
+  // Unit vector from Earth to Sun
+  const sunMag = Math.sqrt(sun.x*sun.x + sun.y*sun.y + sun.z*sun.z);
+  const sunU = { x: sun.x / sunMag, y: sun.y / sunMag, z: sun.z / sunMag };
+  // Component of sat position along sun direction
+  const satDotSun = satEci.x * sunU.x + satEci.y * sunU.y + satEci.z * sunU.z;
+  // Distance of sat from Earth center
+  const rSat = Math.sqrt(satEci.x**2 + satEci.y**2 + satEci.z**2);
+  // Sat-Sun angle (deg from Earth's center)
+  const sunSatAngle = deg(Math.acos(Math.max(-1, Math.min(1, satDotSun / rSat))));
+
+  const EARTH_R = 6378.137;  // km
+  if (satDotSun > 0) {
+    // Sat is on the sunward side of Earth — always sunlit
+    return { illuminated: true, condition: 'sunlit', sunSatAngle };
+  }
+  // Sat is on the anti-sun side. Find perpendicular distance from sat to Earth-Sun line.
+  // Perpendicular vector = satPos - (satPos · sunU) * sunU
+  const perpX = satEci.x - satDotSun * sunU.x;
+  const perpY = satEci.y - satDotSun * sunU.y;
+  const perpZ = satEci.z - satDotSun * sunU.z;
+  const perpDist = Math.sqrt(perpX*perpX + perpY*perpY + perpZ*perpZ);
+
+  if (perpDist > EARTH_R) {
+    // Outside Earth's shadow cylinder — still illuminated
+    return { illuminated: true, condition: 'sunlit', sunSatAngle };
+  }
+  // Inside Earth's umbra (cylindrical approximation, no penumbra distinction for simplicity)
+  return { illuminated: false, condition: 'umbra', sunSatAngle };
+}
+
+// Compute Sun's elevation at observer location (used to determine "visibility window":
+// observer must be in twilight or darker for satellite to be naked-eye visible)
+function sunElevationAtObserver(observer, date) {
+  const sun = sunPositionECI(date);
+  const gmst = satellite.gstime(date);
+  // Convert Sun ECI to ECF then to look angles
+  const sunEcf = satellite.eciToEcf(sun, gmst);
+  const obsGd = { longitude: rad(observer.lon), latitude: rad(observer.lat), height: observer.alt };
+  const la = satellite.ecfToLookAngles(obsGd, sunEcf);
+  return deg(la.elevation);
+}
+
+// Decide overall optical visibility for the satellite from this observer at this time:
+// - Sat must be illuminated by Sun (sunlit)
+// - Sat must be above horizon for the observer
+// - Observer's local Sun must be below civil twilight (-6°)
+function isOpticallyVisible(satIlluminated, satElevation, sunElev) {
+  return satIlluminated && satElevation > 0 && sunElev < -6;
+}
+
 function getSatPosition(satrec, date, observer) {
   const pv = satellite.propagate(satrec, date);
   if (!pv.position) return null;
@@ -1888,15 +2115,28 @@ function getSatPosition(satrec, date, observer) {
   };
   const lookAngles = satellite.ecfToLookAngles(obsGd, satellite.eciToEcf(pv.position, gmst));
   const velKms = Math.sqrt(pv.velocity.x**2 + pv.velocity.y**2 + pv.velocity.z**2);
+
+  // Illumination state
+  const illum = satelliteIlluminationState(pv.position, date);
+  const sunEl = sunElevationAtObserver(obs, date);
+  const elDeg = deg(lookAngles.elevation);
+  const opticallyVisible = isOpticallyVisible(illum.illuminated, elDeg, sunEl);
+
   return {
     lat: deg(geo.latitude),
     lon: deg(geo.longitude),
-    alt: geo.height,           // km
+    alt: geo.height,
     az: deg(lookAngles.azimuth),
-    el: deg(lookAngles.elevation),
-    range: lookAngles.rangeSat, // km
+    el: elDeg,
+    range: lookAngles.rangeSat,
     velocity: velKms,
     eci: pv.position,
+    // New illumination fields:
+    illuminated: illum.illuminated,          // boolean: sunlit?
+    illumCondition: illum.condition,         // 'sunlit' | 'umbra'
+    sunSatAngle: illum.sunSatAngle,          // deg between Earth-Sun and Earth-Sat
+    sunElevation: sunEl,                     // sun elevation at observer (deg)
+    opticallyVisible: opticallyVisible,      // boolean: visible to naked eye?
   };
 }
 
@@ -1975,7 +2215,7 @@ function predictPasses(satrec, observer, hoursOrOptions = 72, minElevation = 0) 
         inPass = false;
         los = refineCrossing(satrec, t - stepSec * 1000, t, minElevation, obsGd, false);
         losAz = los.az;
-        passes.push({
+        const passObj = {
           aos: aos.date,
           aosAz,
           los: los.date,
@@ -1984,13 +2224,74 @@ function predictPasses(satrec, observer, hoursOrOptions = 72, minElevation = 0) 
           maxElTime,
           maxAz,
           duration: los.date.getTime() - aos.date.getTime(),
-        });
+        };
+        // Analyze illumination across the pass
+        Object.assign(passObj, analyzePassIllumination(satrec, obs, passObj));
+        passes.push(passObj);
         if (passes.length >= 30) break;
         maxEl = -90;
       }
     }
   }
   return passes;
+}
+
+// Analyze illumination characteristics of a pass:
+// - sunlit fraction (% of pass time satellite is in sunlight)
+// - whether the observer is in darkness during the pass
+// - whether the pass is optically visible at any point (sunlit sat + observer in twilight/dark)
+function analyzePassIllumination(satrec, observer, pass) {
+  const samples = 12;  // Sample 12 evenly-spaced points across the pass
+  const dt = (pass.los.getTime() - pass.aos.getTime()) / (samples - 1);
+  let sunlitCount = 0;
+  let darkObserverCount = 0;
+  let visibleCount = 0;
+  let anyVisible = false;
+  let tcaIllum = null;
+
+  const obsGd = { longitude: rad(observer.lon), latitude: rad(observer.lat), height: observer.alt };
+
+  for (let i = 0; i < samples; i++) {
+    const d = new Date(pass.aos.getTime() + i * dt);
+    const pv = satellite.propagate(satrec, d);
+    if (!pv.position) continue;
+    const illum = satelliteIlluminationState(pv.position, d);
+    if (illum.illuminated) sunlitCount++;
+    const sunEl = sunElevationAtObserver(observer, d);
+    if (sunEl < -6) darkObserverCount++;
+    // Sat elevation at this time
+    const la = satellite.ecfToLookAngles(obsGd, satellite.eciToEcf(pv.position, satellite.gstime(d)));
+    const elDeg = deg(la.elevation);
+    const visible = illum.illuminated && elDeg > 0 && sunEl < -6;
+    if (visible) { visibleCount++; anyVisible = true; }
+    // Capture illumination at TCA
+    if (Math.abs(d.getTime() - pass.maxElTime.getTime()) < dt / 2) {
+      tcaIllum = { illuminated: illum.illuminated, sunEl };
+    }
+  }
+
+  // Fallback for TCA illumination if not captured by sampling
+  if (!tcaIllum) {
+    const pvTca = satellite.propagate(satrec, pass.maxElTime);
+    if (pvTca.position) {
+      const illumTca = satelliteIlluminationState(pvTca.position, pass.maxElTime);
+      tcaIllum = {
+        illuminated: illumTca.illuminated,
+        sunEl: sunElevationAtObserver(observer, pass.maxElTime),
+      };
+    } else {
+      tcaIllum = { illuminated: false, sunEl: 0 };
+    }
+  }
+
+  return {
+    sunlitFraction: sunlitCount / samples,            // 0..1
+    observerDarkFraction: darkObserverCount / samples,
+    visibleFraction: visibleCount / samples,
+    opticallyVisible: anyVisible,                     // pass has any visible moment
+    tcaSunlit: tcaIllum.illuminated,                  // is sat sunlit at TCA?
+    tcaSunEl: tcaIllum.sunEl,                         // observer sun elevation at TCA
+  };
 }
 
 function refineCrossing(satrec, t0, t1, threshold, obsGd, ascending) {
@@ -2333,6 +2634,25 @@ function fmtKSTDateOnly(d) {
   return `${pad(k.getUTCMonth()+1)}/${pad(k.getUTCDate())}`;
 }
 
+// Returns HTML icon representing illumination state of a pass:
+// ◉ green = optically visible (naked-eye observable)
+// ☀ amber = sat sunlit but observer in daylight (radio-visible but not optical)
+// ◐ dim = sat in eclipse during pass (radio-only)
+// — gray = no data
+function passIllumIcon(p) {
+  if (p.opticallyVisible) {
+    return `<span style="color:var(--green);font-weight:700;" title="Naked-eye visible: sat sunlit, observer in twilight/dark">◉ VIS</span>`;
+  }
+  if (p.tcaSunlit) {
+    return `<span style="color:var(--amber);" title="Sat sunlit at TCA but observer in daylight or sat eclipsed at TCA">☀</span>`;
+  }
+  if (p.sunlitFraction !== undefined && p.sunlitFraction < 0.05) {
+    return `<span style="color:var(--text-dim);" title="Sat in eclipse during pass (radio-only)">◐ ECL</span>`;
+  }
+  // partial eclipse during pass
+  return `<span style="color:var(--text-dim);" title="Mixed illumination during pass">◐</span>`;
+}
+
 function renderPassTable(passes) {
   const tbody = document.getElementById('pass-tbody');
   const table = document.getElementById('pass-table');
@@ -2397,7 +2717,7 @@ function renderPassTable(passes) {
   }
 
   if (!passes.length) {
-    const colspan = passDisplayMode === 'compact' ? 8 : 9;
+    const colspan = passDisplayMode === 'compact' ? 9 : 10;
     tbody.innerHTML = `<tr><td colspan="${colspan}" class="note" style="padding:18px;text-align:center;">No passes above horizon in the selected range.</td></tr>`;
     return;
   }
@@ -2418,6 +2738,7 @@ function renderPassTable(passes) {
       const obsName = p.observerName || '—';
       const satName = p.satName || '—';
       const satColor = p.satColor || 'var(--amber)';
+      const illumIcon = passIllumIcon(p);
       return `
       <tr class="${classes.join(' ')}" data-pass-index="${i}" style="cursor:pointer;">
         <td class="num-cell" data-label="#">${pad(i+1)}</td>
@@ -2428,6 +2749,7 @@ function renderPassTable(passes) {
         <td data-label="LOS KST"><span style="color:var(--amber);font-weight:500;">${fmtKSTTime(p.los)}</span></td>
         <td data-label="Max El"><span style="color:var(--cyan);font-weight:500;">${p.maxEl.toFixed(0)}°</span></td>
         <td data-label="Dur">${fmtDuration(p.duration)}</td>
+        <td data-label="Vis">${illumIcon}</td>
       </tr>`;
     }).join('');
   } else {
@@ -2441,6 +2763,7 @@ function renderPassTable(passes) {
       const obsName = p.observerName || '—';
       const satName = p.satName || '—';
       const satColor = p.satColor || 'var(--amber)';
+      const illumIcon = passIllumIcon(p);
       return `
       <tr class="${classes.join(' ')}" data-pass-index="${i}" style="cursor:pointer;">
         <td class="num num-cell" data-label="Pass">#${pad(i+1)}${passing ? ' · LIVE' : ''}</td>
@@ -2452,6 +2775,7 @@ function renderPassTable(passes) {
         <td data-label="LOS">${fmtDateTime(p.los, false)}<div class="small kst-line">KST ${fmtKST(p.los)}</div></td>
         <td data-label="LOS Az">${p.losAz.toFixed(0)}° <span class="small">${compass(p.losAz)}</span></td>
         <td data-label="Duration">${fmtDuration(p.duration)}</td>
+        <td data-label="Illum">${illumIcon}</td>
       </tr>`;
     }).join('');
   }
@@ -2479,6 +2803,10 @@ setInterval(liveTick, 1000);
 
 function renderAtTime(when, opts = {}) {
   if (!state.target) return;
+  // In preview mode, sync the night/day overlay to the preview time
+  if (opts.isPreview) {
+    refreshNightLayer(when);
+  }
   // Use observer from the preview pass if previewing, else primary
   let activeObserver = getPrimaryObserver();
   if (opts.isPreview && opts.pass && opts.pass.observerId) {
@@ -2505,14 +2833,52 @@ function renderAtTime(when, opts = {}) {
   elEl.className = 'data-value ' + (pos.el >= 0 ? 'green' : 'red');
 
   document.getElementById('d-range').innerHTML = `${pos.range.toFixed(0)} <span class="unit">km</span>`;
+
+  // Visibility (above/below horizon + naked-eye visibility hint)
   const visEl = document.getElementById('d-vis');
   if (pos.el >= 0) {
-    visEl.textContent = 'ABOVE HZN';
-    visEl.className = 'data-value green';
+    if (pos.opticallyVisible) {
+      visEl.textContent = 'VISIBLE';
+      visEl.className = 'data-value green';
+      visEl.title = 'Above horizon, satellite is sunlit, and observer is in twilight/darkness';
+    } else {
+      visEl.textContent = 'ABOVE HZN';
+      visEl.className = 'data-value amber';
+      visEl.title = 'Above horizon but not optically visible (eclipse or daylight)';
+    }
   } else {
     visEl.textContent = 'BELOW HZN';
     visEl.className = 'data-value red';
+    visEl.title = '';
   }
+
+  // Satellite illumination state (sunlit / umbra eclipse)
+  const sunlitEl = document.getElementById('d-sunlit');
+  if (pos.illuminated) {
+    sunlitEl.innerHTML = '☀ SUNLIT';
+    sunlitEl.className = 'data-value amber';
+    sunlitEl.title = 'Satellite is in direct sunlight';
+  } else {
+    sunlitEl.innerHTML = '◐ ECLIPSE';
+    sunlitEl.className = 'data-value';
+    sunlitEl.style = 'color: #888;';
+    sunlitEl.title = 'Satellite is in Earth\'s shadow (umbra)';
+  }
+  // reset inline style if previously set
+  if (pos.illuminated) sunlitEl.style.color = '';
+
+  // Sun elevation at observer (determines if observer is in day/twilight/night)
+  const sunElEl = document.getElementById('d-sunel');
+  const sunEl = pos.sunElevation;
+  let sunLabel, sunClass;
+  if (sunEl > 0) { sunLabel = `${sunEl.toFixed(1)}° DAY`; sunClass = 'data-value amber'; }
+  else if (sunEl > -6) { sunLabel = `${sunEl.toFixed(1)}° CIVIL`; sunClass = 'data-value amber'; }
+  else if (sunEl > -12) { sunLabel = `${sunEl.toFixed(1)}° NAUT`; sunClass = 'data-value'; }
+  else if (sunEl > -18) { sunLabel = `${sunEl.toFixed(1)}° ASTRO`; sunClass = 'data-value'; }
+  else { sunLabel = `${sunEl.toFixed(1)}° NIGHT`; sunClass = 'data-value green'; }
+  sunElEl.textContent = sunLabel;
+  sunElEl.className = sunClass;
+  sunElEl.title = 'Sun elevation at observer. Naked-eye satellite visibility requires < -6° (civil twilight)';
 
   // Primary target marker (large, in target color or amber)
   const targetSat = state.mySats.find(s => s.norad && s.norad === state.target.norad);
@@ -2625,6 +2991,8 @@ function exitPreview() {
   }
   renderPassTable(state.passes);
   renderAtTime(new Date(), { isPreview: false });
+  // Restore night overlay to current time
+  refreshNightLayer();
 }
 
 function renderPreviewAt(sliderValue) {
@@ -3121,7 +3489,8 @@ function passesToCSV(passes) {
     'AOS UTC', 'AOS KST', 'AOS Azimuth (°)', 'AOS Compass',
     'TCA UTC', 'TCA KST', 'Max Elevation (°)', 'TCA Azimuth (°)', 'TCA Compass',
     'LOS UTC', 'LOS KST', 'LOS Azimuth (°)', 'LOS Compass',
-    'Duration (s)', 'Duration (mm:ss)'
+    'Duration (s)', 'Duration (mm:ss)',
+    'Sunlit %', 'TCA Sat Sunlit', 'TCA Sun Elev (°)', 'Optically Visible'
   ].map(csvEscape).join(','));
 
   passes.forEach((p, i) => {
@@ -3131,6 +3500,10 @@ function passesToCSV(passes) {
     const losKst = new Date(p.los.getTime() + 9 * 3600 * 1000).toISOString().replace('Z', '+09:00');
     const durSec = Math.round(p.duration / 1000);
     const durMmSs = `${Math.floor(durSec / 60)}:${pad2(durSec % 60)}`;
+    const sunlitPct = p.sunlitFraction !== undefined ? (p.sunlitFraction * 100).toFixed(0) : '';
+    const tcaSunlit = p.tcaSunlit === true ? 'YES' : p.tcaSunlit === false ? 'NO' : '';
+    const tcaSunEl = p.tcaSunEl !== undefined ? p.tcaSunEl.toFixed(1) : '';
+    const optVis = p.opticallyVisible === true ? 'YES' : p.opticallyVisible === false ? 'NO' : '';
     lines.push([
       i + 1,
       p.satName || '',
@@ -3154,6 +3527,10 @@ function passesToCSV(passes) {
       compass(p.losAz),
       durSec,
       durMmSs,
+      sunlitPct,
+      tcaSunlit,
+      tcaSunEl,
+      optVis,
     ].map(csvEscape).join(','));
   });
 
@@ -3383,19 +3760,28 @@ function drawSkyView(pos, previewPass = null, previewTime = null, multiEvent = n
     const y = cy - r * Math.cos(rad(pos.az));
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     const dotColor = previewPass ? magentaT : greenT;
-    const dotCore = isDark ? '#fff' : dotColor;
+    // If sat is in eclipse, dim the dot and show a shadow ring
+    const eclipse = pos.illuminated === false;
+    const fillColor = eclipse ? '#555' : dotColor;
+    const strokeColor = eclipse ? dotColor : (isDark ? '#fff' : dotColor);
+    const labelColor = eclipse ? dimT : dotColor;
+    const illumLabel = eclipse ? '◐ ECL' : '☀ SUN';
+    const illumColor = eclipse ? dimT : amberT;
     g.innerHTML = `
-      <circle cx="${x}" cy="${y}" r="14" fill="none" stroke="${dotColor}" stroke-width="0.8" opacity="0.4">
+      <circle cx="${x}" cy="${y}" r="14" fill="none" stroke="${dotColor}" stroke-width="0.8" opacity="${eclipse ? 0.25 : 0.4}">
         <animate attributeName="r" values="6;16;6" dur="2s" repeatCount="indefinite"/>
-        <animate attributeName="opacity" values="0.6;0;0.6" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="${eclipse ? '0.4;0;0.4' : '0.6;0;0.6'}" dur="2s" repeatCount="indefinite"/>
       </circle>
-      <circle cx="${x}" cy="${y}" r="6" fill="${dotColor}" stroke="${dotCore}" stroke-width="1.5"/>
-      <circle cx="${x}" cy="${y}" r="1.8" fill="${dotCore}"/>
-      <text x="${x+10}" y="${y-9}" fill="${dotColor}" font-size="10" font-family="JetBrains Mono" font-weight="600">
+      <circle cx="${x}" cy="${y}" r="6" fill="${fillColor}" stroke="${strokeColor}" stroke-width="1.5"/>
+      <circle cx="${x}" cy="${y}" r="1.8" fill="${strokeColor}"/>
+      <text x="${x+10}" y="${y-9}" fill="${labelColor}" font-size="10" font-family="JetBrains Mono" font-weight="600">
         ${state.target.name.split(' ')[0]}
       </text>
-      <text x="${x+10}" y="${y+5}" fill="${dimT}" font-size="9" font-family="JetBrains Mono">
+      <text x="${x+10}" y="${y+3}" fill="${dimT}" font-size="9" font-family="JetBrains Mono">
         ${pos.el.toFixed(1)}° · ${compass(pos.az)}
+      </text>
+      <text x="${x+10}" y="${y+13}" fill="${illumColor}" font-size="9" font-family="JetBrains Mono" font-weight="600">
+        ${illumLabel}
       </text>
     `;
     svg.appendChild(g);
