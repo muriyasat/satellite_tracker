@@ -2559,7 +2559,9 @@ function renderAtTime(when, opts = {}) {
     fillOpacity: 0.06,
   }).addTo(map);
 
-  if (opts.isPreview && opts.pass) {
+  if (opts.isPreview && opts.multiEvent) {
+    drawSkyView(pos, opts.pass, when, opts.multiEvent);
+  } else if (opts.isPreview && opts.pass) {
     drawSkyView(pos, opts.pass, when);
   } else {
     drawSkyView(pos);
@@ -3171,7 +3173,7 @@ function downloadFile(content, filename, mimeType) {
 }
 
 // ============= SKY VIEW =============
-function drawSkyView(pos, previewPass = null, previewTime = null) {
+function drawSkyView(pos, previewPass = null, previewTime = null, multiEvent = null) {
   const svg = document.getElementById('skyview');
   const cx = 150, cy = 150, R = 130;
   const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
@@ -3206,9 +3208,114 @@ function drawSkyView(pos, previewPass = null, previewTime = null) {
     <text x="${cx+4}" y="${cy-R/3+10}" fill="${faintT}" font-size="9" font-family="JetBrains Mono">60°</text>
   `;
 
-  const passToDraw = previewPass || state.passes.find(p => p.los.getTime() > Date.now());
+  // ============== MULTI-CONTACT MODE ==============
+  if (multiEvent) {
+    const obs = findObserver(multiEvent.observerId);
+    if (!obs) return;
+    const obsGd = { longitude: rad(obs.lon), latitude: rad(obs.lat), height: obs.alt };
+    const now = previewTime ? previewTime.getTime() : Date.now();
 
-  if (passToDraw && state.target) {
+    // For each sat in the multi event, draw its sky path and current position
+    for (const s of multiEvent.sats) {
+      const mySat = state.mySats.find(m => (m.norad && m.norad === s.norad) || m.name === s.name);
+      if (!mySat || !mySat.l1 || !mySat.l2) continue;
+      let satrec;
+      try {
+        satrec = satellite.twoline2satrec(mySat.l1, mySat.l2);
+        if (satrec.error) continue;
+      } catch (_) { continue; }
+
+      const color = s.color || '#888';
+
+      // Build sky path from AOS to LOS of this sat
+      const pathPts = [];
+      const stepMs = Math.max(5000, (s.los.getTime() - s.aos.getTime()) / 60);
+      for (let t = s.aos.getTime(); t <= s.los.getTime(); t += stepMs) {
+        const d = new Date(t);
+        const pv = satellite.propagate(satrec, d);
+        if (!pv.position) continue;
+        const la = satellite.ecfToLookAngles(obsGd, satellite.eciToEcf(pv.position, satellite.gstime(d)));
+        const e = deg(la.elevation);
+        const a = deg(la.azimuth);
+        if (e < 0) continue;
+        const r = R * (1 - e/90);
+        const x = cx + r * Math.sin(rad(a));
+        const y = cy - r * Math.cos(rad(a));
+        pathPts.push({ x, y, t, e, a });
+      }
+
+      if (pathPts.length > 1) {
+        let pathD = '';
+        pathPts.forEach((p, i) => {
+          pathD += (i === 0 ? 'M' : 'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1);
+        });
+        // Glow + main line in this sat's color
+        if (isDark) {
+          const glowPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          glowPath.setAttribute('d', pathD);
+          glowPath.setAttribute('fill', 'none');
+          glowPath.setAttribute('stroke', color);
+          glowPath.setAttribute('stroke-width', '5');
+          glowPath.setAttribute('opacity', '0.18');
+          glowPath.setAttribute('stroke-linecap', 'round');
+          svg.appendChild(glowPath);
+        }
+        const mainPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        mainPath.setAttribute('d', pathD);
+        mainPath.setAttribute('fill', 'none');
+        mainPath.setAttribute('stroke', color);
+        mainPath.setAttribute('stroke-width', '2');
+        mainPath.setAttribute('opacity', '0.9');
+        mainPath.setAttribute('stroke-linecap', 'round');
+        svg.appendChild(mainPath);
+
+        // Label start/end points
+        addSkyLabel(svg, pathPts[0].x, pathPts[0].y, s.name.split(' ')[0], color);
+      }
+
+      // Current satellite position at preview time
+      const dPv = satellite.propagate(satrec, new Date(now));
+      if (dPv.position) {
+        const la = satellite.ecfToLookAngles(obsGd, satellite.eciToEcf(dPv.position, satellite.gstime(new Date(now))));
+        const e = deg(la.elevation);
+        const a = deg(la.azimuth);
+        if (e >= 0) {
+          const r = R * (1 - e/90);
+          const x = cx + r * Math.sin(rad(a));
+          const y = cy - r * Math.cos(rad(a));
+          const dotCore = isDark ? '#fff' : color;
+          const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+          g.innerHTML = `
+            <circle cx="${x}" cy="${y}" r="12" fill="none" stroke="${color}" stroke-width="0.8" opacity="0.35">
+              <animate attributeName="r" values="5;14;5" dur="2s" repeatCount="indefinite"/>
+              <animate attributeName="opacity" values="0.6;0;0.6" dur="2s" repeatCount="indefinite"/>
+            </circle>
+            <circle cx="${x}" cy="${y}" r="5" fill="${color}" stroke="${dotCore}" stroke-width="1.2"/>
+            <circle cx="${x}" cy="${y}" r="1.5" fill="${dotCore}"/>
+            <text x="${x+8}" y="${y-6}" fill="${color}" font-size="9" font-family="JetBrains Mono" font-weight="600">${e.toFixed(0)}°</text>
+          `;
+          svg.appendChild(g);
+        }
+      }
+    }
+
+    // Indicator at center if currently inside the multi-contact window
+    const insideMulti = now >= multiEvent.startTime.getTime() && now <= multiEvent.endTime.getTime();
+    const indicatorText = insideMulti ? '⧉ MULTI' : '...';
+    const indicatorColor = insideMulti ? magentaT : dimT;
+    const indicator = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    indicator.innerHTML = `
+      <rect x="${cx - 30}" y="${cy + R - 20}" width="60" height="14" fill="${isDark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.7)'}" stroke="${indicatorColor}" stroke-width="0.8" rx="2"/>
+      <text x="${cx}" y="${cy + R - 10}" fill="${indicatorColor}" font-size="9" font-family="JetBrains Mono" font-weight="700" text-anchor="middle">${indicatorText}</text>
+    `;
+    svg.appendChild(indicator);
+    return;  // Skip the single-target rendering below
+  }
+
+  // ============== SINGLE-TARGET MODE (original behavior) ==============
+  const passToDraw = previewPass || state.passes.find(p => p && p.aos && p.los && p.los.getTime() > Date.now());
+
+  if (passToDraw && state.target && passToDraw.aos && passToDraw.los) {
     // Use the observer associated with this pass (or primary if not specified)
     const obs = passToDraw.observerId ? findObserver(passToDraw.observerId) : getPrimaryObserver();
     if (!obs) return;
