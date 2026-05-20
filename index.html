@@ -1381,7 +1381,10 @@
               <option value="orbit3">3 orbits</option>
             </select>
           </div>
-          <button id="map-reset-btn" style="width:100%;background:var(--panel-2);color:var(--cyan);border:1px solid var(--cyan-dim);padding:4px 6px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.08em;cursor:pointer;text-transform:uppercase;" title="Reset map view to show entire Earth">⊕ Reset view</button>
+          <div style="display:flex;gap:4px;">
+            <button id="map-reset-btn" style="flex:1;background:var(--panel-2);color:var(--cyan);border:1px solid var(--cyan-dim);padding:4px 6px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.08em;cursor:pointer;text-transform:uppercase;" title="Reset map view to show entire Earth">⊕ Reset</button>
+            <button id="map-zoom-sat-btn" style="flex:1;background:var(--panel-2);color:var(--amber);border:1px solid var(--amber);padding:4px 6px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.08em;cursor:pointer;text-transform:uppercase;" title="Zoom to current satellite position">◎ To Sat</button>
+          </div>
         </div>
         <div class="legend-row">
           <div class="legend-dot" style="background:#ffeb3b;box-shadow:0 0 8px #ffeb3b;"></div>
@@ -1736,9 +1739,16 @@
       btn.classList.toggle('active', btn.dataset.tab === name);
     });
     document.body.setAttribute('data-tab-mode', name);
-    // Trigger map resize if map is being shown
+    // Trigger map resize if map is being shown.
+    // Mobile tab transitions can leave Leaflet with a stale container size,
+    // causing the gray-tile / half-rendered look. Call invalidateSize multiple times
+    // to catch the size changes through any CSS transition.
     if (panes.includes('map') && window._map) {
-      setTimeout(() => window._map.invalidateSize(), 50);
+      [50, 200, 400].forEach(delay => {
+        setTimeout(() => {
+          try { window._map.invalidateSize({ animate: false }); } catch (_) {}
+        }, delay);
+      });
     }
     window.scrollTo({ top: 0, behavior: 'instant' });
   }
@@ -1916,7 +1926,7 @@ const state = {
   obsFootprints: [],
   showFootprints: true,
   // Ground track length: 'pass' | 'orbit1' | 'orbit2' | 'orbit3'
-  trackMode: 'pass',
+  trackMode: 'orbit1',
 };
 
 // Validate primary observer id
@@ -2007,6 +2017,23 @@ const map = L.map('map', {
   attributionControl: true,
 });
 window._map = map;
+
+// Recompute map size on viewport changes (orientation, browser resize, mobile chrome show/hide)
+window.addEventListener('resize', () => {
+  if (window._map) {
+    try { window._map.invalidateSize({ animate: false }); } catch (_) {}
+  }
+});
+window.addEventListener('orientationchange', () => {
+  // Orientation change triggers layout reflow; give it time to settle
+  [100, 300, 600].forEach(delay => {
+    setTimeout(() => {
+      if (window._map) {
+        try { window._map.invalidateSize({ animate: false }); } catch (_) {}
+      }
+    }, delay);
+  });
+});
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '© OpenStreetMap · SGP4 propagation via satellite.js · TLE: CelesTrak',
   maxZoom: 8,
@@ -2346,8 +2373,37 @@ if (trackModeSelect) {
 
 // Map reset view button — fit world or current target
 document.getElementById('map-reset-btn').addEventListener('click', () => {
-  // Show entire world: zoom out to fit all continents
-  map.setView([20, 0], 2, { animate: true });
+  // First, tell Leaflet the container size may have changed (mobile tab switches, etc.)
+  // This fixes the common "gray tiles / half-rendered" issue after layout changes.
+  map.invalidateSize();
+  // Defer setView so it runs after the size recalc completes
+  requestAnimationFrame(() => {
+    map.setView([20, 0], 2, { animate: true });
+  });
+});
+
+// Zoom to current satellite — bring the tracked satellite into clear view
+document.getElementById('map-zoom-sat-btn').addEventListener('click', () => {
+  if (!state.target) {
+    // No target → fall back to world view
+    map.invalidateSize();
+    requestAnimationFrame(() => map.setView([20, 0], 2, { animate: true }));
+    return;
+  }
+  // Compute current sub-satellite point (or preview time if in preview)
+  const when = state.preview ? state.preview.time : new Date();
+  try {
+    const pv = satellite.propagate(state.target.satrec, when);
+    if (!pv.position) return;
+    const gmst = satellite.gstime(when);
+    const geo = satellite.eciToGeodetic(pv.position, gmst);
+    const lat = deg(geo.latitude), lon = deg(geo.longitude);
+    map.invalidateSize();
+    requestAnimationFrame(() => {
+      // Zoom level 4 shows ~5000km wide region — enough to see sat + nearby observers
+      map.setView([lat, lon], 4, { animate: true });
+    });
+  } catch (_) {}
 });
 
 // Expose refresh helper for theme switcher to call after color change
