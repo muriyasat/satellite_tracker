@@ -2037,7 +2037,7 @@ window.addEventListener('orientationchange', () => {
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '© OpenStreetMap · SGP4 propagation via satellite.js · TLE: CelesTrak',
   maxZoom: 8,
-  minZoom: 1,
+  minZoom: 0,
 }).addTo(map);
 
 function obsIcon(color) {
@@ -2371,14 +2371,21 @@ if (trackModeSelect) {
   });
 }
 
-// Map reset view button — fit world or current target
+// Map reset view button — fit the entire world to the current viewport.
+// Using fitBounds lets Leaflet calculate the best zoom automatically based on container size.
+// This is especially important on mobile where narrow viewports need a lower zoom level.
 document.getElementById('map-reset-btn').addEventListener('click', () => {
   // First, tell Leaflet the container size may have changed (mobile tab switches, etc.)
-  // This fixes the common "gray tiles / half-rendered" issue after layout changes.
   map.invalidateSize();
-  // Defer setView so it runs after the size recalc completes
+  // Defer the fit so it runs after the size recalc completes
   requestAnimationFrame(() => {
-    map.setView([20, 0], 2, { animate: true });
+    // Use slightly larger-than-world bounds to ensure full visibility with some margin.
+    // [-85, 85] avoids Mercator pole distortion; full longitude wrap [-180, 180].
+    const worldBounds = L.latLngBounds([-75, -180], [85, 180]);
+    map.fitBounds(worldBounds, {
+      animate: true,
+      padding: [10, 10],   // small margin so edges aren't flush with viewport
+    });
   });
 });
 
@@ -2387,7 +2394,9 @@ document.getElementById('map-zoom-sat-btn').addEventListener('click', () => {
   if (!state.target) {
     // No target → fall back to world view
     map.invalidateSize();
-    requestAnimationFrame(() => map.setView([20, 0], 2, { animate: true }));
+    requestAnimationFrame(() => {
+      map.fitBounds(L.latLngBounds([-75, -180], [85, 180]), { animate: true, padding: [10, 10] });
+    });
     return;
   }
   // Compute current sub-satellite point (or preview time if in preview)
