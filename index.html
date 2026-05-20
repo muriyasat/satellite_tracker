@@ -462,6 +462,15 @@
     font-family: 'JetBrains Mono', monospace;
     color-scheme: dark light;
   }
+  .satsat-select {
+    width: 100%;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border-bright);
+    padding: 6px 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+  }
   .pass-mode-btn {
     background: var(--panel);
     border: none;
@@ -954,6 +963,7 @@
     /* Hide the detail header explicitly, show the compact header */
     .pass-table.compact #pass-thead-detail { display: none !important; }
     .pass-table.compact #pass-thead-multi { display: none !important; }
+    .pass-table.compact #pass-thead-satsat { display: none !important; }
     .pass-table.compact #pass-thead-compact { display: table-header-group !important; }
     .pass-table.compact #pass-thead-compact th {
       padding: 6px 3px;
@@ -967,6 +977,7 @@
     /* Multi-contact mode shares some of compact's mobile styling */
     .pass-table.multi #pass-thead-detail { display: none !important; }
     .pass-table.multi #pass-thead-compact { display: none !important; }
+    .pass-table.multi #pass-thead-satsat { display: none !important; }
     .pass-table.multi #pass-thead-multi { display: table-header-group !important; }
     .pass-table.multi #pass-thead-multi th {
       padding: 6px 3px;
@@ -1000,6 +1011,35 @@
       border-bottom: 1px solid var(--border) !important;
       padding-bottom: 8px !important;
     }
+    /* Sat-to-Sat mode — table-style like multi */
+    .pass-table.satsat #pass-thead-detail { display: none !important; }
+    .pass-table.satsat #pass-thead-compact { display: none !important; }
+    .pass-table.satsat #pass-thead-multi { display: none !important; }
+    .pass-table.satsat #pass-thead-satsat { display: table-header-group !important; }
+    .pass-table.satsat #pass-thead-satsat th {
+      padding: 6px 3px;
+      font-size: 8px;
+      letter-spacing: 0.04em;
+      position: sticky;
+      top: 0;
+      background: var(--bg-2);
+      z-index: 5;
+    }
+    .pass-table.satsat { font-size: 11px; }
+    .pass-table.satsat tr { display: table-row !important; background: transparent !important; box-shadow: none !important; }
+    .pass-table.satsat tr.selected { box-shadow: inset 0 0 0 1px var(--cyan) !important; background: rgba(0,229,255,0.06) !important; }
+    .pass-table.satsat td {
+      display: table-cell !important;
+      padding: 8px 3px !important;
+      font-size: 10px !important;
+      border: none !important;
+      border-bottom: 1px solid var(--border) !important;
+      padding-left: 3px !important;
+      min-height: 0 !important;
+      text-align: left;
+      vertical-align: middle;
+    }
+    .pass-table.satsat td::before { display: none !important; }
     .pass-table.compact tr {
       display: table-row !important;
       background: transparent !important;
@@ -1358,6 +1398,7 @@
             <button class="pass-mode-btn" data-pass-mode="detail" title="Detail mode">≡ Detail</button>
             <button class="pass-mode-btn" data-pass-mode="compact" title="Compact mode">⋮ Compact</button>
             <button class="pass-mode-btn" data-pass-mode="multi" title="Multi-contact mode — find times when 2+ satellites are simultaneously visible">⧉ Multi</button>
+            <button class="pass-mode-btn" data-pass-mode="satsat" title="Sat-to-Sat imaging mode — when one satellite can image another">⊕ Sat-Sat</button>
           </div>
           <span class="panel-title" id="pass-count" style="color:var(--cyan);"></span>
         </div>
@@ -1394,6 +1435,39 @@
           <button class="btn ghost" id="range-reset" style="flex:1;min-width:140px;">⟲ Reset to 72h</button>
         </div>
         <div id="range-status" class="note" style="margin-top:6px;display:none;"></div>
+      </div>
+
+      <!-- Sat-to-Sat imaging mode controls -->
+      <div id="satsat-bar" style="display:none; padding: 12px 16px; background: rgba(0,229,255,0.05); border-bottom: 1px solid var(--border);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+          <span style="color:var(--cyan);font-size:10px;letter-spacing:0.2em;text-transform:uppercase;">⊕ Inter-Satellite Imaging</span>
+          <span style="color:var(--text-dim);font-size:10px;margin-left:auto;">Observer AOS/LOS ignored</span>
+        </div>
+        <div class="time-range-grid">
+          <div>
+            <label style="margin:0 0 4px 0;">Camera Satellite (imager)</label>
+            <select id="satsat-camera" class="satsat-select"></select>
+          </div>
+          <div>
+            <label style="margin:0 0 4px 0;">Target Satellite (subject)</label>
+            <select id="satsat-target" class="satsat-select"></select>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+          <div>
+            <label style="margin:0 0 4px 0;" title="Camera focal length (mm)">Focal Length (mm)</label>
+            <input id="satsat-focal" type="number" value="500" min="10" max="100000" step="10">
+          </div>
+          <div>
+            <label style="margin:0 0 4px 0;" title="Camera pixel pitch (μm)">Pixel Pitch (μm)</label>
+            <input id="satsat-pixel" type="number" value="5.5" min="0.5" max="100" step="0.1">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn" id="satsat-compute" style="flex:1;min-width:140px;">▸ Compute Contacts</button>
+          <button class="btn ghost" id="satsat-csv" style="flex:1;min-width:140px;" title="Download as CSV">⤓ CSV</button>
+        </div>
+        <div id="satsat-status" class="note" style="margin-top:6px;display:none;"></div>
       </div>
 
       <div id="preview-bar" style="display:none; padding: 10px 16px; background: rgba(255,182,39,0.05); border-bottom: 1px solid var(--border); align-items:center; gap: 14px;">
@@ -1441,6 +1515,21 @@
               <th>Start <span style="color:var(--amber)">KST</span></th>
               <th>End <span style="color:var(--amber)">KST</span></th>
               <th>Overlap</th>
+            </tr>
+          </thead>
+          <thead id="pass-thead-satsat" style="display:none;">
+            <tr>
+              <th>#</th>
+              <th>Camera</th>
+              <th>Target</th>
+              <th>AOS <span style="color:var(--amber)">KST</span></th>
+              <th>Peak <span style="color:var(--amber)">KST</span></th>
+              <th>Duration</th>
+              <th title="Closest approach during contact">Min Range</th>
+              <th title="Angular rate of target as seen from camera at peak">Ang Rate</th>
+              <th title="Required scan/line rate in pixels per second">Line Rate</th>
+              <th title="Sunlit / Eclipse status of target">Tgt Illum</th>
+              <th title="Sun-Target-Camera angle (phase). Low = backlit, ~90 = side-lit, high = front-lit">Phase</th>
             </tr>
           </thead>
           <tbody id="pass-tbody">
@@ -2102,6 +2191,206 @@ function isOpticallyVisible(satIlluminated, satElevation, sunElev) {
   return satIlluminated && satElevation > 0 && sunElev < -6;
 }
 
+// ============= SAT-TO-SAT VISIBILITY =============
+// Check if two satellites can see each other (line-of-sight not blocked by Earth)
+// satA, satB: ECI positions {x, y, z} in km
+// Returns: { visible: bool, range: km, tangentAltitude: km (negative if blocked) }
+const EARTH_RADIUS_KM = 6378.137;
+function satToSatLineOfSight(satA, satB) {
+  // Vector from A to B
+  const dx = satB.x - satA.x;
+  const dy = satB.y - satA.y;
+  const dz = satB.z - satA.z;
+  const range = Math.sqrt(dx*dx + dy*dy + dz*dz);
+  if (range < 1e-6) return { visible: true, range: 0, tangentAlt: Infinity };
+
+  // Unit vector along the line A→B
+  const ux = dx / range, uy = dy / range, uz = dz / range;
+  // Project Earth center (0,0,0) onto line A+t*u, find t that minimizes distance
+  // t = -(A · u)
+  const t = -(satA.x * ux + satA.y * uy + satA.z * uz);
+  let tangentDistance;  // closest approach of line to Earth center
+  if (t < 0 || t > range) {
+    // Closest point is outside the segment; the segment is entirely on one side
+    // Just use the minimum distance to either endpoint magnitude
+    const rA = Math.sqrt(satA.x**2 + satA.y**2 + satA.z**2);
+    const rB = Math.sqrt(satB.x**2 + satB.y**2 + satB.z**2);
+    tangentDistance = Math.min(rA, rB);
+  } else {
+    // Closest point on segment to Earth center
+    const cx = satA.x + t * ux;
+    const cy = satA.y + t * uy;
+    const cz = satA.z + t * uz;
+    tangentDistance = Math.sqrt(cx*cx + cy*cy + cz*cz);
+  }
+  const tangentAlt = tangentDistance - EARTH_RADIUS_KM;
+  // Use a small atmospheric buffer (refraction + atmosphere): visible if tangent altitude > -50 km
+  // We use 0 (Earth surface) for strict line-of-sight, since atmospheric absorption above ~80 km
+  // is negligible for visible light. For imaging we want clear LOS, so threshold = 100 km (above
+  // most of the atmosphere) to be safe.
+  const ATMOSPHERE_BUFFER_KM = 100;
+  return {
+    visible: tangentAlt > ATMOSPHERE_BUFFER_KM,
+    range,
+    tangentAlt,
+  };
+}
+
+// Calculate angular rate of target as seen from camera satellite (line rate)
+// Returns object with: angularRate (rad/s), perpVelocity (km/s), range (km)
+function satToSatLineRate(camera, target) {
+  // camera, target: { eci: {x,y,z}, velocity vector if available }
+  // We compute relative velocity perpendicular to line-of-sight
+  const dx = target.eci.x - camera.eci.x;
+  const dy = target.eci.y - camera.eci.y;
+  const dz = target.eci.z - camera.eci.z;
+  const range = Math.sqrt(dx*dx + dy*dy + dz*dz);
+  if (range < 1e-6) return { angularRate: 0, perpVelocity: 0, range: 0 };
+
+  const ux = dx / range, uy = dy / range, uz = dz / range;
+  // Relative velocity (target - camera)
+  const vx = target.velocity.x - camera.velocity.x;
+  const vy = target.velocity.y - camera.velocity.y;
+  const vz = target.velocity.z - camera.velocity.z;
+  // Radial component (along LOS)
+  const vrad = vx * ux + vy * uy + vz * uz;
+  // Perpendicular component magnitude (angular motion = perp/range)
+  const vpx = vx - vrad * ux;
+  const vpy = vy - vrad * uy;
+  const vpz = vz - vrad * uz;
+  const vperp = Math.sqrt(vpx*vpx + vpy*vpy + vpz*vpz);
+  const angularRate = vperp / range;  // rad/s
+  return { angularRate, perpVelocity: vperp, radialVelocity: vrad, range };
+}
+
+// Propagate a satellite and return ECI position + velocity at the given time
+function propagateFull(satrec, date) {
+  const pv = satellite.propagate(satrec, date);
+  if (!pv.position || !pv.velocity) return null;
+  return {
+    eci: pv.position,
+    velocity: pv.velocity,
+    date,
+  };
+}
+
+// Find inter-satellite contacts: time windows when sat A can see sat B (LOS unobstructed by Earth)
+// Returns array of contacts: { aos, los, peakTime, peakRange, minRange, sats: {a, b}, illumination at peak, etc. }
+function findSatToSatContacts(satA, satB, startTime, endTime, stepSec = 30) {
+  const contacts = [];
+  let inContact = false;
+  let contactStart = null;
+  let minRange = Infinity;
+  let peakTime = null;
+
+  // Pre-create satrec
+  let satrecA, satrecB;
+  try {
+    satrecA = satellite.twoline2satrec(satA.l1, satA.l2);
+    satrecB = satellite.twoline2satrec(satB.l1, satB.l2);
+    if (satrecA.error || satrecB.error) return contacts;
+  } catch (_) { return contacts; }
+
+  for (let t = startTime.getTime(); t < endTime.getTime(); t += stepSec * 1000) {
+    const d = new Date(t);
+    const pvA = satellite.propagate(satrecA, d);
+    const pvB = satellite.propagate(satrecB, d);
+    if (!pvA.position || !pvB.position) continue;
+    const los = satToSatLineOfSight(pvA.position, pvB.position);
+
+    if (los.visible) {
+      if (!inContact) {
+        // Refine AOS by bisection
+        contactStart = refineSatToSatTransition(satrecA, satrecB, t - stepSec * 1000, t, true);
+        inContact = true;
+        minRange = los.range;
+        peakTime = d;
+      } else {
+        if (los.range < minRange) {
+          minRange = los.range;
+          peakTime = d;
+        }
+      }
+    } else if (inContact) {
+      // End of contact
+      const contactEnd = refineSatToSatTransition(satrecA, satrecB, t - stepSec * 1000, t, false);
+      const contact = buildContactObject(satA, satB, satrecA, satrecB, contactStart, contactEnd, peakTime, minRange);
+      if (contact) contacts.push(contact);
+      if (contacts.length >= 200) break;
+      inContact = false;
+      minRange = Infinity;
+      peakTime = null;
+    }
+  }
+  return contacts;
+}
+
+function refineSatToSatTransition(satrecA, satrecB, t0, t1, ascending) {
+  for (let i = 0; i < 12; i++) {
+    const mid = (t0 + t1) / 2;
+    const d = new Date(mid);
+    const pvA = satellite.propagate(satrecA, d);
+    const pvB = satellite.propagate(satrecB, d);
+    if (!pvA.position || !pvB.position) return new Date(mid);
+    const los = satToSatLineOfSight(pvA.position, pvB.position);
+    if ((ascending && !los.visible) || (!ascending && los.visible)) {
+      t0 = mid;
+    } else {
+      t1 = mid;
+    }
+  }
+  return new Date((t0 + t1) / 2);
+}
+
+function buildContactObject(satA, satB, satrecA, satrecB, aos, los, peakTime, minRange) {
+  // Compute peak-time details: range, angular rate, illumination
+  const pvA = satellite.propagate(satrecA, peakTime);
+  const pvB = satellite.propagate(satrecB, peakTime);
+  if (!pvA.position || !pvB.position) return null;
+
+  const rateInfo = satToSatLineRate(
+    { eci: pvA.position, velocity: pvA.velocity },
+    { eci: pvB.position, velocity: pvB.velocity }
+  );
+
+  // Illumination: is target (B) sunlit at peak?
+  const illumB = satelliteIlluminationState(pvB.position, peakTime);
+  const illumA = satelliteIlluminationState(pvA.position, peakTime);
+
+  // Sun-target-camera angle (phase angle, important for photometry):
+  // phase angle = angle between Sun→target and camera→target vectors
+  const sun = sunPositionECI(peakTime);
+  // Vector from target to Sun (unit)
+  const tsX = sun.x - pvB.position.x;
+  const tsY = sun.y - pvB.position.y;
+  const tsZ = sun.z - pvB.position.z;
+  const tsMag = Math.sqrt(tsX*tsX + tsY*tsY + tsZ*tsZ);
+  // Vector from target to camera (unit)
+  const tcX = pvA.position.x - pvB.position.x;
+  const tcY = pvA.position.y - pvB.position.y;
+  const tcZ = pvA.position.z - pvB.position.z;
+  const tcMag = Math.sqrt(tcX*tcX + tcY*tcY + tcZ*tcZ);
+  const cosPhase = (tsX*tcX + tsY*tcY + tsZ*tcZ) / (tsMag * tcMag);
+  const phaseAngle = deg(Math.acos(Math.max(-1, Math.min(1, cosPhase))));
+
+  return {
+    type: 'sat-sat',
+    cameraName: satA.name, cameraNorad: satA.norad || '', cameraColor: satA.color || '#00e5ff',
+    targetName: satB.name, targetNorad: satB.norad || '', targetColor: satB.color || '#ffb627',
+    aos, los,
+    duration: los.getTime() - aos.getTime(),
+    peakTime,
+    peakRange: minRange,           // km, closest approach
+    rangeAtPeak: rateInfo.range,   // km
+    angularRate: rateInfo.angularRate,  // rad/s
+    perpVelocity: rateInfo.perpVelocity, // km/s
+    radialVelocity: rateInfo.radialVelocity, // km/s (negative = approaching)
+    targetSunlit: illumB.illuminated,
+    cameraSunlit: illumA.illuminated,
+    phaseAngle, // deg
+  };
+}
+
 function getSatPosition(satrec, date, observer) {
   const pv = satellite.propagate(satrec, date);
   if (!pv.position) return null;
@@ -2447,6 +2736,388 @@ function findMultiContactEvents(passes) {
   return events;
 }
 
+// ============= SAT-TO-SAT MODE UI =============
+// Fill the camera/target selectors from My Satellites (those with cached TLEs)
+function populateSatSatSelectors() {
+  const camSel = document.getElementById('satsat-camera');
+  const tgtSel = document.getElementById('satsat-target');
+  if (!camSel || !tgtSel) return;
+  const eligible = state.mySats.filter(s => s.l1 && s.l2);
+
+  if (eligible.length < 2) {
+    camSel.innerHTML = `<option value="">— need 2+ sats with TLEs —</option>`;
+    tgtSel.innerHTML = `<option value="">— need 2+ sats with TLEs —</option>`;
+    return;
+  }
+
+  const opts = eligible.map(s => {
+    const key = s.norad || s.name;
+    return `<option value="${key}">${s.name}${s.norad ? ' (' + s.norad + ')' : ''}</option>`;
+  }).join('');
+
+  // Preserve current selection if possible
+  const prevCam = camSel.value;
+  const prevTgt = tgtSel.value;
+  camSel.innerHTML = opts;
+  tgtSel.innerHTML = opts;
+  // Set defaults: first 2 different sats
+  if (prevCam && [...camSel.options].some(o => o.value === prevCam)) camSel.value = prevCam;
+  else camSel.value = eligible[0].norad || eligible[0].name;
+  if (prevTgt && [...tgtSel.options].some(o => o.value === prevTgt) && tgtSel.value !== camSel.value) {
+    tgtSel.value = prevTgt;
+  } else {
+    const second = eligible.find(s => (s.norad || s.name) !== camSel.value);
+    if (second) tgtSel.value = second.norad || second.name;
+  }
+}
+
+function getSatByKey(key) {
+  return state.mySats.find(s => (s.norad && s.norad === key) || s.name === key);
+}
+
+function renderSatSatTable() {
+  const tbody = document.getElementById('pass-tbody');
+  const contacts = state.satSatContacts || [];
+
+  if (!contacts.length) {
+    tbody.innerHTML = `<tr><td colspan="11" class="note" style="padding:18px;text-align:center;">
+      Select camera and target satellites above, then click <b>Compute Contacts</b>.<br>
+      <span style="font-size:10px;color:var(--text-dim);">Contacts are times when the two satellites have unobstructed line-of-sight.</span>
+    </td></tr>`;
+    return;
+  }
+
+  const now = Date.now();
+  const focalMm = parseFloat(document.getElementById('satsat-focal').value) || 500;
+  const pixelUm = parseFloat(document.getElementById('satsat-pixel').value) || 5.5;
+  // Line rate (px/s) = angular rate (rad/s) × focal length (mm) / pixel pitch (μm) × 1000
+  // because 1 mm = 1000 μm, so (rad × mm/μm) = rad × 1000, and rad × mm focal / μm pixel = px per rad
+  // Cleaner derivation:
+  //   image displacement on sensor = angular rate * focal_length  (in same units)
+  //   pixel motion = displacement / pixel_pitch
+  //   With focal_length in mm and pixel_pitch in μm: convert focal to μm by ×1000
+  //   line rate [px/s] = ω [rad/s] × focal [mm] × 1000 [μm/mm] / pixel [μm]
+  const calcLineRate = (rateRadS) => rateRadS * focalMm * 1000 / pixelUm;
+
+  const previewIdx = state.preview && state.preview.satsatIndex !== undefined ? state.preview.satsatIndex : -1;
+
+  tbody.innerHTML = contacts.map((c, i) => {
+    const ongoing = now >= c.aos.getTime() && now <= c.los.getTime();
+    const selected = i === previewIdx;
+    const classes = [];
+    if (ongoing) classes.push('passing');
+    if (selected) classes.push('selected');
+
+    const lineRate = calcLineRate(c.angularRate);
+    const angRateMrad = (c.angularRate * 1000).toFixed(2);  // mrad/s for readability
+
+    const tgtIllum = c.targetSunlit
+      ? `<span style="color:var(--amber);font-weight:700;" title="Target satellite is sunlit (visible to camera)">☀ SUN</span>`
+      : `<span style="color:var(--text-dim);" title="Target in Earth's shadow — not visible to camera">◐ ECL</span>`;
+
+    // Phase angle interpretation: <30° = backlit (hard), 30-90° = side-lit (great), 90-150° = front-lit, >150° = nearly fully lit
+    let phaseLabel = '';
+    let phaseColor = '';
+    if (c.phaseAngle < 30) { phaseLabel = '◗ back'; phaseColor = 'var(--text-dim)'; }
+    else if (c.phaseAngle < 90) { phaseLabel = '◐ side'; phaseColor = 'var(--cyan)'; }
+    else if (c.phaseAngle < 150) { phaseLabel = '◑ front'; phaseColor = 'var(--green)'; }
+    else { phaseLabel = '○ full'; phaseColor = 'var(--amber)'; }
+
+    return `
+    <tr class="${classes.join(' ')}" data-satsat-index="${i}" style="cursor:pointer;">
+      <td class="num-cell" data-label="#">${pad(i+1)}</td>
+      <td data-label="Camera"><span class="obs-chip" style="background:${c.cameraColor};box-shadow:0 0 4px ${c.cameraColor};"></span><span class="obs-name-cell" style="color:${c.cameraColor};">${c.cameraName}</span></td>
+      <td data-label="Target"><span class="obs-chip" style="background:${c.targetColor};box-shadow:0 0 4px ${c.targetColor};"></span><span class="obs-name-cell" style="color:${c.targetColor};">${c.targetName}</span></td>
+      <td data-label="AOS"><span style="color:var(--amber);font-weight:500;">${fmtKSTTime(c.aos)}</span><div class="small" style="color:var(--text-dim);">${fmtKSTDateOnly(c.aos)}</div></td>
+      <td data-label="Peak"><span style="color:var(--cyan);font-weight:500;">${fmtKSTTime(c.peakTime)}</span></td>
+      <td data-label="Duration">${fmtDuration(c.duration)}</td>
+      <td data-label="Min Range"><span style="color:var(--cyan);">${c.peakRange.toFixed(0)} <span style="color:var(--text-dim);font-size:9px;">km</span></span></td>
+      <td data-label="Ang Rate"><span title="Angular rate at peak (mrad/s)">${angRateMrad} <span style="color:var(--text-dim);font-size:9px;">mrad/s</span></span></td>
+      <td data-label="Line Rate"><span style="color:var(--magenta);font-weight:500;" title="${focalMm}mm focal, ${pixelUm}μm pixel">${lineRate.toFixed(0)} <span style="color:var(--text-dim);font-size:9px;">px/s</span></span></td>
+      <td data-label="Tgt Illum">${tgtIllum}</td>
+      <td data-label="Phase"><span style="color:${phaseColor};" title="Sun-Target-Camera angle: ${c.phaseAngle.toFixed(0)}°">${phaseLabel}</span></td>
+    </tr>`;
+  }).join('');
+
+  tbody.querySelectorAll('tr[data-satsat-index]').forEach(tr => {
+    tr.addEventListener('click', () => {
+      const idx = parseInt(tr.dataset.satsatIndex);
+      enterSatSatPreview(idx);
+    });
+  });
+}
+
+async function computeSatSatContactsForUI() {
+  const status = document.getElementById('satsat-status');
+  const camKey = document.getElementById('satsat-camera').value;
+  const tgtKey = document.getElementById('satsat-target').value;
+  status.style.display = 'block';
+
+  if (!camKey || !tgtKey) {
+    status.className = 'error';
+    status.textContent = '✗ Select both camera and target satellites.';
+    return;
+  }
+  if (camKey === tgtKey) {
+    status.className = 'error';
+    status.textContent = '✗ Camera and target must be different satellites.';
+    return;
+  }
+  const camSat = getSatByKey(camKey);
+  const tgtSat = getSatByKey(tgtKey);
+  if (!camSat || !tgtSat || !camSat.l1 || !tgtSat.l1) {
+    status.className = 'error';
+    status.textContent = '✗ Both satellites need cached TLEs. Click them in My Satellites first.';
+    return;
+  }
+
+  const opts = getPassPredictionOptions();
+  let startTime, endTime;
+  if (typeof opts === 'object') {
+    startTime = opts.startTime; endTime = opts.endTime;
+  } else {
+    startTime = new Date();
+    endTime = new Date(startTime.getTime() + opts * 3600 * 1000);
+  }
+
+  status.className = 'note';
+  const hours = (endTime - startTime) / 3600000;
+  status.textContent = `▸ Computing sat-to-sat contacts over ${hours.toFixed(1)}h...`;
+  // Defer to next tick so status shows
+  await new Promise(r => setTimeout(r, 30));
+
+  try {
+    const contacts = findSatToSatContacts(camSat, tgtSat, startTime, endTime, 30);
+    // Sort by closest approach distance (smallest Min Range first)
+    contacts.sort((a, b) => a.peakRange - b.peakRange);
+    state.satSatContacts = contacts;
+    renderPassTable([]);  // triggers satsat render
+    document.getElementById('pass-count').textContent =
+      `${contacts.length} CONTACTS · ${camSat.name} → ${tgtSat.name}`;
+    if (contacts.length === 0) {
+      status.className = 'note';
+      status.innerHTML = `No line-of-sight contacts found in this time range.<br><span style="color:var(--text-dim);font-size:10px;">The satellites may be on opposite sides of Earth, or this range is too short.</span>`;
+    } else {
+      status.className = 'ok';
+      status.textContent = `✓ Found ${contacts.length} contacts. Sorted by closest approach.`;
+    }
+  } catch (e) {
+    status.className = 'error';
+    status.textContent = `✗ Computation failed: ${e.message}`;
+  }
+}
+
+// ============= SAT-SAT PREVIEW =============
+function enterSatSatPreview(idx) {
+  if (!state.satSatContacts || !state.satSatContacts[idx]) return;
+  const c = state.satSatContacts[idx];
+  // Pad preview window slightly outside the contact for context
+  const padMs = Math.max(60000, c.duration * 0.25);
+  const windowStart = new Date(c.aos.getTime() - padMs);
+  const windowEnd = new Date(c.los.getTime() + padMs);
+
+  state.preview = {
+    satsatIndex: idx,
+    contact: c,
+    windowStart, windowEnd,
+    time: c.peakTime,
+  };
+
+  const bar = document.getElementById('preview-bar');
+  bar.style.display = 'flex';
+  document.getElementById('preview-num').textContent = `SAT-SAT #${pad(idx+1)} · ${c.cameraName} → ${c.targetName}`;
+  const slider = document.getElementById('preview-slider');
+  // Start at peak
+  const peakRatio = (c.peakTime.getTime() - windowStart.getTime()) / (windowEnd.getTime() - windowStart.getTime());
+  slider.value = Math.round(peakRatio * 1000);
+
+  // Draw both satellite tracks on the map during the contact window
+  drawSatSatTracks(c);
+
+  document.getElementById('track-status').textContent = '◉ SAT-SAT';
+  renderPassTable([]);
+  renderSatSatPreviewAt(slider.value);
+
+  if (window.innerWidth <= 900 && window.showPane) {
+    const currentMode = document.body.getAttribute('data-tab-mode');
+    if (currentMode === 'catalog') window.showPane('passes');
+  }
+}
+
+function renderSatSatPreviewAt(sliderValue) {
+  if (!state.preview || state.preview.satsatIndex === undefined) return;
+  const c = state.preview.contact;
+  const ws = state.preview.windowStart.getTime();
+  const we = state.preview.windowEnd.getTime();
+  const ratio = sliderValue / 1000;
+  const t = ws + ratio * (we - ws);
+  const when = new Date(t);
+  state.preview.time = when;
+
+  // Determine if we're inside contact window
+  const insideContact = t >= c.aos.getTime() && t <= c.los.getTime();
+  // Compute current sat-sat LOS state at this time
+  const camSat = getSatByKey(c.cameraNorad || c.cameraName);
+  const tgtSat = getSatByKey(c.targetNorad || c.targetName);
+  let liveInfo = '';
+  if (camSat && tgtSat && camSat.l1 && tgtSat.l1) {
+    try {
+      const recA = satellite.twoline2satrec(camSat.l1, camSat.l2);
+      const recB = satellite.twoline2satrec(tgtSat.l1, tgtSat.l2);
+      const pvA = satellite.propagate(recA, when);
+      const pvB = satellite.propagate(recB, when);
+      if (pvA.position && pvB.position) {
+        const los = satToSatLineOfSight(pvA.position, pvB.position);
+        const rate = satToSatLineRate(
+          { eci: pvA.position, velocity: pvA.velocity },
+          { eci: pvB.position, velocity: pvB.velocity }
+        );
+        const focalMm = parseFloat(document.getElementById('satsat-focal').value) || 500;
+        const pixelUm = parseFloat(document.getElementById('satsat-pixel').value) || 5.5;
+        const linePxS = rate.angularRate * focalMm * 1000 / pixelUm;
+        const illumB = satelliteIlluminationState(pvB.position, when);
+        const losColor = los.visible ? 'var(--green)' : 'var(--red)';
+        const illumColor = illumB.illuminated ? 'var(--amber)' : 'var(--text-dim)';
+        liveInfo = ` · <span style="color:${losColor};">${los.visible ? 'LOS ✓' : 'LOS ✗'}</span> · <span style="color:var(--cyan);">${los.range.toFixed(0)} km</span> · <span style="color:var(--magenta);">${linePxS.toFixed(0)} px/s</span> · <span style="color:${illumColor};">${illumB.illuminated ? '☀' : '◐'}</span>`;
+      }
+    } catch (_) {}
+  }
+
+  const tag = insideContact
+    ? `<span style="color:var(--cyan);font-weight:700;">⊕ CONTACT</span>`
+    : `<span style="color:var(--text-dim);">outside</span>`;
+  document.getElementById('preview-time').innerHTML =
+    `${fmtDateTime(when, false).slice(11)} <span style="color:var(--amber);">/ KST ${fmtKSTTime(when)}</span> · ${tag}${liveInfo}`;
+
+  // Render both satellite positions on the map at this time
+  if (camSat && tgtSat) renderSatSatMarkersAt(when, camSat, tgtSat);
+
+  // Sky view & telemetry from primary observer's perspective, but render both sats
+  if (state.target) renderAtTime(when, { isPreview: true });
+}
+
+function renderSatSatMarkersAt(when, camSat, tgtSat) {
+  // Reuse renderAtTime-style marker rendering via state.allSatMarkers
+  Object.values(state.allSatMarkers || {}).forEach(m => map.removeLayer(m));
+  state.allSatMarkers = {};
+  for (const s of [camSat, tgtSat]) {
+    if (!s.l1 || !s.l2) continue;
+    try {
+      const rec = satellite.twoline2satrec(s.l1, s.l2);
+      const pv = satellite.propagate(rec, when);
+      if (!pv.position) continue;
+      const gmst = satellite.gstime(when);
+      const geo = satellite.eciToGeodetic(pv.position, gmst);
+      const lat = deg(geo.latitude), lon = deg(geo.longitude);
+      const key = (s.norad || s.name) + '-satsat';
+      const role = s === camSat ? 'Camera' : 'Target';
+      const marker = L.marker([lat, lon], { icon: satIcon(s.color || '#888', role === 'Target') })
+        .addTo(map)
+        .bindPopup(`<b>${s.name}</b><br><b>${role}</b><br>Alt: ${geo.height.toFixed(1)} km`);
+      state.allSatMarkers[key] = marker;
+    } catch (_) {}
+  }
+}
+
+function drawSatSatTracks(contact) {
+  if (state.passTrackLayer) map.removeLayer(state.passTrackLayer);
+  const group = L.layerGroup();
+  const camSat = getSatByKey(contact.cameraNorad || contact.cameraName);
+  const tgtSat = getSatByKey(contact.targetNorad || contact.targetName);
+  if (!camSat || !tgtSat || !camSat.l1 || !tgtSat.l1) return;
+
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+
+  for (const s of [camSat, tgtSat]) {
+    let rec;
+    try { rec = satellite.twoline2satrec(s.l1, s.l2); if (rec.error) continue; } catch (_) { continue; }
+    const color = s.color || '#888';
+    const coreColor = isDark ? '#ffffff' : color;
+    const segments = [];
+    let current = [];
+    let prevLon = null;
+    const stepMs = Math.max(5000, contact.duration / 60);
+    for (let t = contact.aos.getTime(); t <= contact.los.getTime(); t += stepMs) {
+      const d = new Date(t);
+      const pv = satellite.propagate(rec, d);
+      if (!pv.position) continue;
+      const geo = satellite.eciToGeodetic(pv.position, satellite.gstime(d));
+      const lat = deg(geo.latitude), lon = deg(geo.longitude);
+      if (prevLon !== null && Math.abs(lon - prevLon) > 180) {
+        segments.push(current); current = [];
+      }
+      current.push([lat, lon]);
+      prevLon = lon;
+    }
+    if (current.length) segments.push(current);
+
+    segments.forEach(seg => {
+      if (seg.length > 1) {
+        if (isDark) L.polyline(seg, { color, weight: 8, opacity: 0.18, lineCap: 'round' }).addTo(group);
+        L.polyline(seg, { color, weight: 4, opacity: 0.7, lineCap: 'round' }).addTo(group);
+        L.polyline(seg, { color: coreColor, weight: 1.5, opacity: 1, lineCap: 'round' }).addTo(group);
+      }
+    });
+  }
+  group.addTo(map);
+  state.passTrackLayer = group;
+}
+
+// CSV download for sat-sat contacts
+function satSatContactsToCSV() {
+  const contacts = state.satSatContacts || [];
+  if (!contacts.length) return null;
+  const focalMm = parseFloat(document.getElementById('satsat-focal').value) || 500;
+  const pixelUm = parseFloat(document.getElementById('satsat-pixel').value) || 5.5;
+  const calcLineRate = (r) => r * focalMm * 1000 / pixelUm;
+
+  const lines = [];
+  lines.push(`# Inter-Satellite Imaging Contacts`);
+  lines.push(`# Camera Satellite,${csvEscape(contacts[0].cameraName)} (${csvEscape(contacts[0].cameraNorad || '')})`);
+  lines.push(`# Target Satellite,${csvEscape(contacts[0].targetName)} (${csvEscape(contacts[0].targetNorad || '')})`);
+  lines.push(`# Focal Length (mm),${focalMm}`);
+  lines.push(`# Pixel Pitch (um),${pixelUm}`);
+  if (state.passRange) {
+    lines.push(`# Time Range,${csvEscape(state.passRange.startTime.toISOString())} to ${csvEscape(state.passRange.endTime.toISOString())}`);
+  } else {
+    lines.push(`# Time Range,Next 72 hours from generation time`);
+  }
+  lines.push(`# Generated,${new Date().toISOString()}`);
+  lines.push('');
+  lines.push([
+    '#', 'AOS UTC', 'AOS KST', 'Peak UTC', 'Peak KST', 'LOS UTC', 'LOS KST',
+    'Duration (s)', 'Duration (mm:ss)',
+    'Min Range (km)', 'Range @ Peak (km)',
+    'Angular Rate @ Peak (mrad/s)', 'Perp Velocity (km/s)', 'Radial Velocity (km/s)',
+    'Line Rate @ Peak (px/s)',
+    'Target Sunlit', 'Camera Sunlit', 'Phase Angle (deg)'
+  ].map(csvEscape).join(','));
+
+  contacts.forEach((c, i) => {
+    const aosKst = new Date(c.aos.getTime() + 9 * 3600 * 1000).toISOString().replace('Z', '+09:00');
+    const peakKst = new Date(c.peakTime.getTime() + 9 * 3600 * 1000).toISOString().replace('Z', '+09:00');
+    const losKst = new Date(c.los.getTime() + 9 * 3600 * 1000).toISOString().replace('Z', '+09:00');
+    const durSec = Math.round(c.duration / 1000);
+    const durMmSs = `${Math.floor(durSec / 60)}:${pad2(durSec % 60)}`;
+    lines.push([
+      i + 1,
+      c.aos.toISOString(), aosKst,
+      c.peakTime.toISOString(), peakKst,
+      c.los.toISOString(), losKst,
+      durSec, durMmSs,
+      c.peakRange.toFixed(1), c.rangeAtPeak.toFixed(1),
+      (c.angularRate * 1000).toFixed(3),
+      c.perpVelocity.toFixed(3), c.radialVelocity.toFixed(3),
+      calcLineRate(c.angularRate).toFixed(1),
+      c.targetSunlit ? 'YES' : 'NO',
+      c.cameraSunlit ? 'YES' : 'NO',
+      c.phaseAngle.toFixed(1),
+    ].map(csvEscape).join(','));
+  });
+
+  return '\uFEFF' + lines.join('\r\n');
+}
+
 // Get the current options for pass prediction based on user's selected range
 function getPassPredictionOptions() {
   if (state.passRange) {
@@ -2659,16 +3330,25 @@ function renderPassTable(passes) {
   const theadDetail = document.getElementById('pass-thead-detail');
   const theadCompact = document.getElementById('pass-thead-compact');
   const theadMulti = document.getElementById('pass-thead-multi');
+  const theadSatsat = document.getElementById('pass-thead-satsat');
 
   // Apply mode class — CSS handles thead visibility based on the class on mobile
-  table.classList.remove('compact', 'multi');
+  table.classList.remove('compact', 'multi', 'satsat');
   if (passDisplayMode === 'compact') table.classList.add('compact');
   else if (passDisplayMode === 'multi') table.classList.add('multi');
+  else if (passDisplayMode === 'satsat') table.classList.add('satsat');
 
   // For desktop, toggle inline display
   theadDetail.style.display = (passDisplayMode === 'detail') ? '' : 'none';
   theadCompact.style.display = (passDisplayMode === 'compact') ? '' : 'none';
   theadMulti.style.display = (passDisplayMode === 'multi') ? '' : 'none';
+  if (theadSatsat) theadSatsat.style.display = (passDisplayMode === 'satsat') ? '' : 'none';
+
+  // ============ SAT-TO-SAT MODE ============
+  if (passDisplayMode === 'satsat') {
+    renderSatSatTable();
+    return;
+  }
 
   // ============ MULTI-CONTACT MODE ============
   if (passDisplayMode === 'multi') {
@@ -2996,7 +3676,12 @@ function exitPreview() {
 }
 
 function renderPreviewAt(sliderValue) {
-  if (!state.preview || !state.target) return;
+  if (!state.preview) return;
+  if (state.preview.satsatIndex !== undefined) {
+    renderSatSatPreviewAt(sliderValue);
+    return;
+  }
+  if (!state.target) return;
   if (state.preview.multiIndex !== undefined) {
     renderMultiPreviewAt(sliderValue);
     return;
@@ -3245,27 +3930,49 @@ document.querySelectorAll('.pass-mode-btn[data-pass-mode]').forEach(btn => {
     const newMode = btn.dataset.passMode;
     // Exit preview when switching between fundamentally different modes
     if (state.preview && newMode !== passDisplayMode) {
-      // If switching to/from multi, the preview type may change — exit cleanly
-      const wasMulti = state.preview.multiIndex !== undefined;
-      const isToMulti = newMode === 'multi';
-      if (wasMulti !== isToMulti) {
-        exitPreview();
-      }
+      exitPreview();
     }
     passDisplayMode = newMode;
     document.querySelectorAll('.pass-mode-btn[data-pass-mode]').forEach(b => {
       b.classList.toggle('active', b.dataset.passMode === passDisplayMode);
     });
+    // Show/hide the sat-sat control bar
+    const satsatBar = document.getElementById('satsat-bar');
+    if (satsatBar) {
+      satsatBar.style.display = (passDisplayMode === 'satsat') ? 'block' : 'none';
+      if (passDisplayMode === 'satsat') populateSatSatSelectors();
+    }
     const body = document.getElementById('pass-panel-body');
     if (body) {
       const isMobile = window.innerWidth <= 900;
       if (isMobile) {
         body.style.maxHeight = '';
       } else {
-        body.style.maxHeight = (passDisplayMode === 'compact' || passDisplayMode === 'multi') ? '60vh' : '320px';
+        body.style.maxHeight = (passDisplayMode === 'compact' || passDisplayMode === 'multi' || passDisplayMode === 'satsat') ? '60vh' : '320px';
       }
     }
     renderPassTable(state.passes);
+  });
+});
+
+// ============= SAT-SAT MODE HANDLERS =============
+document.getElementById('satsat-compute').addEventListener('click', computeSatSatContactsForUI);
+document.getElementById('satsat-csv').addEventListener('click', () => {
+  const csv = satSatContactsToCSV();
+  if (!csv) { alert('No contacts to export. Click Compute Contacts first.'); return; }
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const camKey = document.getElementById('satsat-camera').value;
+  const tgtKey = document.getElementById('satsat-target').value;
+  const filename = `satsat_${camKey}_to_${tgtKey}_${stamp}.csv`.replace(/[^a-zA-Z0-9_.-]/g, '_');
+  downloadFile(csv, filename, 'text/csv;charset=utf-8;');
+});
+// Re-render to recompute line rate when focal/pixel changes (no recomputation of contacts needed)
+['satsat-focal', 'satsat-pixel'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', () => {
+    if (passDisplayMode === 'satsat' && state.satSatContacts && state.satSatContacts.length) {
+      renderSatSatTable();
+    }
   });
 });
 
@@ -3969,6 +4676,9 @@ function renderMySatList() {
       e.stopPropagation(); deleteMySat(idx);
     });
   });
+
+  // Keep sat-sat selectors in sync with My Satellites changes
+  if (passDisplayMode === 'satsat') populateSatSatSelectors();
 }
 
 function toggleSat(idx, active) {
