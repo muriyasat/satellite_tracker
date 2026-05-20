@@ -7,7 +7,45 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700;800&family=Major+Mono+Display&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" id="leaflet-css-primary" />
+<script>
+  // Fallback CSS loader: if Leaflet CSS fails to load (e.g. blocked CDN), try alternatives
+  (function() {
+    const fallbacks = [
+      'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
+      'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css',
+      'https://fastly.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css',
+    ];
+    let idx = 0;
+    function tryFallback() {
+      if (idx >= fallbacks.length) return;
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = fallbacks[idx++];
+      link.onerror = tryFallback;
+      document.head.appendChild(link);
+    }
+    const primary = document.getElementById('leaflet-css-primary');
+    primary.onerror = tryFallback;
+    // Also check after a delay: if primary loaded but CSS rules didn't apply (rare CDN issue),
+    // we'd still need fallback. We can detect by inspecting if leaflet styles loaded.
+    setTimeout(() => {
+      try {
+        const probe = document.createElement('div');
+        probe.className = 'leaflet-container';
+        probe.style.position = 'absolute';
+        probe.style.visibility = 'hidden';
+        document.body.appendChild(probe);
+        const cs = window.getComputedStyle(probe);
+        // Leaflet adds specific styles like overflow:hidden
+        if (cs.overflow !== 'hidden') {
+          tryFallback();
+        }
+        document.body.removeChild(probe);
+      } catch (_) {}
+    }, 1500);
+  })();
+</script>
 <style>
   /* ============= THEMES ============= */
   /* DARK (default) — mission control */
@@ -1298,6 +1336,22 @@
           <div class="legend-dot" style="background:transparent;border:2px solid #00e5ff;box-shadow:0 0 6px #00e5ff;"></div>
           <span>Observer</span>
         </div>
+        <div class="legend-row" style="cursor:pointer;" id="footprint-toggle" title="Toggle observer visibility footprints">
+          <div class="legend-swatch" style="background:transparent;border:1px dashed #888;"></div>
+          <span id="footprint-toggle-label">Obs footprints ◯</span>
+        </div>
+        <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+            <span style="color:var(--text-dim);font-size:9px;letter-spacing:0.1em;">TRACK</span>
+            <select id="track-mode-select" style="flex:1;background:var(--panel-2);color:var(--text);border:1px solid var(--border-bright);padding:2px 4px;font-family:'JetBrains Mono',monospace;font-size:10px;">
+              <option value="pass">1 pass (next AOS→LOS)</option>
+              <option value="orbit1">1 orbit</option>
+              <option value="orbit2">2 orbits</option>
+              <option value="orbit3">3 orbits</option>
+            </select>
+          </div>
+          <button id="map-reset-btn" style="width:100%;background:var(--panel-2);color:var(--cyan);border:1px solid var(--cyan-dim);padding:4px 6px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.08em;cursor:pointer;text-transform:uppercase;" title="Reset map view to show entire Earth">⊕ Reset view</button>
+        </div>
         <div class="legend-row">
           <div class="legend-dot" style="background:#ffeb3b;box-shadow:0 0 8px #ffeb3b;"></div>
           <span>Subsolar point ☀</span>
@@ -1527,7 +1581,7 @@
               <th>Duration</th>
               <th title="Closest approach during contact">Min Range</th>
               <th title="Angular rate of target as seen from camera at peak">Ang Rate</th>
-              <th title="Required scan/line rate in pixels per second">Line Rate</th>
+              <th title="Required line clock rate in Hz (px/s) for TDI imaging">Line Rate</th>
               <th title="Sunlit / Eclipse status of target">Tgt Illum</th>
               <th title="Sun-Target-Camera angle (phase). Low = backlit, ~90 = side-lit, high = front-lit">Phase</th>
             </tr>
@@ -1673,14 +1727,19 @@ async function bootstrap() {
     await loadScript([
       'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
       'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
-      'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js'
+      'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js',
+      'https://fastly.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
+      'https://gcore.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
+      'https://esm.sh/leaflet@1.9.4/dist/leaflet.js'
     ], 'Leaflet');
 
     if (statusEl) statusEl.textContent = '▸ Loading satellite.js...';
     await loadScript([
       'https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js',
       'https://unpkg.com/satellite.js@5.0.0/dist/satellite.min.js',
-      'https://cdnjs.cloudflare.com/ajax/libs/satellite.js/5.0.0/satellite.min.js'
+      'https://cdnjs.cloudflare.com/ajax/libs/satellite.js/5.0.0/satellite.min.js',
+      'https://fastly.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js',
+      'https://gcore.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js'
     ], 'satellite.js');
 
     if (typeof L === 'undefined') throw new Error('Leaflet (L) not available after load');
@@ -1799,7 +1858,12 @@ const state = {
   // Night/terminator overlay
   nightLayer: null,
   nightUpdateInterval: null,
-  showNight: true,  // toggleable
+  showNight: true,
+  // Observer visibility footprints
+  obsFootprints: [],
+  showFootprints: true,
+  // Ground track length: 'pass' | 'orbit1' | 'orbit2' | 'orbit3'
+  trackMode: 'pass',
 };
 
 // Validate primary observer id
@@ -1917,8 +1981,70 @@ function refreshObserverMarkers() {
   // Remove existing markers
   Object.values(state.obsMarkers).forEach(m => map.removeLayer(m));
   state.obsMarkers = {};
-  // Add markers for all active observers
-  getActiveObservers().forEach(obs => {
+  // Remove existing footprints
+  if (state.obsFootprints) {
+    state.obsFootprints.forEach(f => map.removeLayer(f));
+  }
+  state.obsFootprints = [];
+
+  const activeObs = getActiveObservers();
+
+  // Determine which satellites to draw footprints for.
+  // Guard against being called before state.mySats is initialized (early in load sequence).
+  const mySats = state.mySats || [];
+  const satsForFootprint = [];
+  // Also guard against satellite.js not yet being loaded
+  if (typeof satellite !== 'undefined') {
+    for (const s of mySats) {
+      if (!s.active || !s.l1 || !s.l2) continue;
+      try {
+        const rec = satellite.twoline2satrec(s.l1, s.l2);
+        if (rec.error) continue;
+        const pv = satellite.propagate(rec, new Date());
+        if (!pv.position) continue;
+        const gmst = satellite.gstime(new Date());
+        const geo = satellite.eciToGeodetic(pv.position, gmst);
+        satsForFootprint.push({ name: s.name, color: s.color || '#888', altKm: geo.height });
+      } catch (_) {}
+    }
+  }
+
+  // Draw visibility footprints — one per (observer × satellite) pair.
+  // Geometry: max ground distance = R_earth * arccos(R_earth / (R_earth + h))
+  // where h is satellite altitude. This is the radius of the circle on Earth's surface
+  // within which the satellite is above the observer's horizon (elevation ≥ 0°).
+  const showFootprints = state.showFootprints !== false;
+  if (showFootprints) {
+    activeObs.forEach(obs => {
+      satsForFootprint.forEach(sat => {
+        // Central angle (radians) from observer to horizon-tangent point
+        const ratio = EARTH_RADIUS_KM / (EARTH_RADIUS_KM + sat.altKm);
+        const centralAngle = Math.acos(Math.max(-1, Math.min(1, ratio)));
+        // Ground radius in meters (for Leaflet circle)
+        const groundRadiusM = EARTH_RADIUS_KM * centralAngle * 1000;
+
+        const circle = L.circle([obs.lat, obs.lon], {
+          radius: groundRadiusM,
+          color: sat.color,
+          weight: 1.2,
+          opacity: 0.45,
+          fillColor: sat.color,
+          fillOpacity: 0.03,
+          dashArray: '4 4',
+          interactive: false,
+        });
+        circle.bindTooltip(
+          `${obs.name} ⇄ ${sat.name}<br>Visible when sub-satellite point within ${(groundRadiusM/1000).toFixed(0)} km<br>(sat alt: ${sat.altKm.toFixed(0)} km)`,
+          { sticky: true, className: 'custom-tooltip' }
+        );
+        circle.addTo(map);
+        state.obsFootprints.push(circle);
+      });
+    });
+  }
+
+  // Add observer markers (drawn on top of footprints)
+  activeObs.forEach(obs => {
     const isPrimary = obs.id === state.primaryObserverId;
     const marker = L.marker([obs.lat, obs.lon], { icon: obsIcon(obs.color) })
       .addTo(map)
@@ -1975,6 +2101,19 @@ state.nightUpdateInterval = setInterval(() => {
   if (!state.preview) refreshNightLayer();
 }, 60000);
 
+// Refresh observer footprints periodically (sat altitudes drift slightly over time)
+setInterval(() => {
+  if (!state.preview) refreshObserverMarkers();
+}, 300000);  // every 5 min
+
+// Refresh ground track every 60s in live mode to keep "next pass" mode accurate
+// (also handles satellite drift for orbit modes)
+setInterval(() => {
+  if (!state.preview && (state.target || getActiveSats().length)) {
+    drawGroundTrack();
+  }
+}, 60000);
+
 // Night overlay toggle (in map legend)
 document.getElementById('night-toggle').addEventListener('click', () => {
   state.showNight = !state.showNight;
@@ -1982,6 +2121,33 @@ document.getElementById('night-toggle').addEventListener('click', () => {
   label.textContent = state.showNight ? 'Night side ◐' : 'Night side (off)';
   label.style.opacity = state.showNight ? '1' : '0.5';
   refreshNightLayer(state.preview ? state.preview.time : new Date());
+});
+
+// Observer footprint toggle
+document.getElementById('footprint-toggle').addEventListener('click', () => {
+  state.showFootprints = state.showFootprints === false ? true : false;
+  const label = document.getElementById('footprint-toggle-label');
+  label.textContent = state.showFootprints ? 'Obs footprints ◯' : 'Obs footprints (off)';
+  label.style.opacity = state.showFootprints ? '1' : '0.5';
+  refreshObserverMarkers();
+});
+
+// Track length mode selector
+const trackModeSelect = document.getElementById('track-mode-select');
+if (trackModeSelect) {
+  trackModeSelect.value = state.trackMode || 'pass';
+  trackModeSelect.addEventListener('change', (e) => {
+    state.trackMode = e.target.value;
+    if (state.target || getActiveSats().length) {
+      drawGroundTrack();
+    }
+  });
+}
+
+// Map reset view button — fit world or current target
+document.getElementById('map-reset-btn').addEventListener('click', () => {
+  // Show entire world: zoom out to fit all continents
+  map.setView([20, 0], 2, { animate: true });
 });
 
 // Expose refresh helper for theme switcher to call after color change
@@ -2775,6 +2941,18 @@ function getSatByKey(key) {
   return state.mySats.find(s => (s.norad && s.norad === key) || s.name === key);
 }
 
+// Format line rate as Hz with appropriate unit prefix (Hz / kHz / MHz)
+// Line rate in px/s is equivalent to Hz (TDI line clock frequency)
+function formatLineRate(pxPerSec) {
+  if (pxPerSec >= 1e6) {
+    return `${(pxPerSec / 1e6).toFixed(2)} <span style="color:var(--text-dim);font-size:9px;">MHz</span>`;
+  }
+  if (pxPerSec >= 1e3) {
+    return `${(pxPerSec / 1e3).toFixed(2)} <span style="color:var(--text-dim);font-size:9px;">kHz</span>`;
+  }
+  return `${pxPerSec.toFixed(1)} <span style="color:var(--text-dim);font-size:9px;">Hz</span>`;
+}
+
 function renderSatSatTable() {
   const tbody = document.getElementById('pass-tbody');
   const contacts = state.satSatContacts || [];
@@ -2833,7 +3011,7 @@ function renderSatSatTable() {
       <td data-label="Duration">${fmtDuration(c.duration)}</td>
       <td data-label="Min Range"><span style="color:var(--cyan);">${c.peakRange.toFixed(0)} <span style="color:var(--text-dim);font-size:9px;">km</span></span></td>
       <td data-label="Ang Rate"><span title="Angular rate at peak (mrad/s)">${angRateMrad} <span style="color:var(--text-dim);font-size:9px;">mrad/s</span></span></td>
-      <td data-label="Line Rate"><span style="color:var(--magenta);font-weight:500;" title="${focalMm}mm focal, ${pixelUm}μm pixel">${lineRate.toFixed(0)} <span style="color:var(--text-dim);font-size:9px;">px/s</span></span></td>
+      <td data-label="Line Rate"><span style="color:var(--magenta);font-weight:500;" title="Line rate = px/s = Hz (TDI line clock). ${focalMm}mm focal, ${pixelUm}μm pixel">${formatLineRate(lineRate)}</span></td>
       <td data-label="Tgt Illum">${tgtIllum}</td>
       <td data-label="Phase"><span style="color:${phaseColor};" title="Sun-Target-Camera angle: ${c.phaseAngle.toFixed(0)}°">${phaseLabel}</span></td>
     </tr>`;
@@ -2975,10 +3153,13 @@ function renderSatSatPreviewAt(sliderValue) {
         const focalMm = parseFloat(document.getElementById('satsat-focal').value) || 500;
         const pixelUm = parseFloat(document.getElementById('satsat-pixel').value) || 5.5;
         const linePxS = rate.angularRate * focalMm * 1000 / pixelUm;
+        const lineHzStr = linePxS >= 1e6 ? `${(linePxS/1e6).toFixed(2)} MHz`
+                       : linePxS >= 1e3 ? `${(linePxS/1e3).toFixed(2)} kHz`
+                       : `${linePxS.toFixed(1)} Hz`;
         const illumB = satelliteIlluminationState(pvB.position, when);
         const losColor = los.visible ? 'var(--green)' : 'var(--red)';
         const illumColor = illumB.illuminated ? 'var(--amber)' : 'var(--text-dim)';
-        liveInfo = ` · <span style="color:${losColor};">${los.visible ? 'LOS ✓' : 'LOS ✗'}</span> · <span style="color:var(--cyan);">${los.range.toFixed(0)} km</span> · <span style="color:var(--magenta);">${linePxS.toFixed(0)} px/s</span> · <span style="color:${illumColor};">${illumB.illuminated ? '☀' : '◐'}</span>`;
+        liveInfo = ` · <span style="color:${losColor};">${los.visible ? 'LOS ✓' : 'LOS ✗'}</span> · <span style="color:var(--cyan);">${los.range.toFixed(0)} km</span> · <span style="color:var(--magenta);">${lineHzStr}</span> · <span style="color:${illumColor};">${illumB.illuminated ? '☀' : '◐'}</span>`;
       }
     } catch (_) {}
   }
@@ -3089,7 +3270,7 @@ function satSatContactsToCSV() {
     'Duration (s)', 'Duration (mm:ss)',
     'Min Range (km)', 'Range @ Peak (km)',
     'Angular Rate @ Peak (mrad/s)', 'Perp Velocity (km/s)', 'Radial Velocity (km/s)',
-    'Line Rate @ Peak (px/s)',
+    'Line Rate @ Peak (Hz)', 'Line Rate @ Peak (kHz)',
     'Target Sunlit', 'Camera Sunlit', 'Phase Angle (deg)'
   ].map(csvEscape).join(','));
 
@@ -3099,6 +3280,7 @@ function satSatContactsToCSV() {
     const losKst = new Date(c.los.getTime() + 9 * 3600 * 1000).toISOString().replace('Z', '+09:00');
     const durSec = Math.round(c.duration / 1000);
     const durMmSs = `${Math.floor(durSec / 60)}:${pad2(durSec % 60)}`;
+    const lineHz = calcLineRate(c.angularRate);
     lines.push([
       i + 1,
       c.aos.toISOString(), aosKst,
@@ -3108,7 +3290,7 @@ function satSatContactsToCSV() {
       c.peakRange.toFixed(1), c.rangeAtPeak.toFixed(1),
       (c.angularRate * 1000).toFixed(3),
       c.perpVelocity.toFixed(3), c.radialVelocity.toFixed(3),
-      calcLineRate(c.angularRate).toFixed(1),
+      lineHz.toFixed(1), (lineHz / 1000).toFixed(3),
       c.targetSunlit ? 'YES' : 'NO',
       c.cameraSunlit ? 'YES' : 'NO',
       c.phaseAngle.toFixed(1),
@@ -3207,6 +3389,52 @@ function epochString(satrec) {
   return fmtDateTime(d, false);
 }
 
+// Find the LOS time of the next pass over any active observer, returning minutes from now.
+// If no upcoming pass within 1 orbit, fall back to 1 full orbit.
+function computeNextPassEndMinutes(satrec, periodMin) {
+  const observers = getActiveObservers();
+  if (!observers.length) return Math.min(periodMin, 100);
+  const now = new Date();
+  const horizonMin = Math.min(periodMin * 1.2, 180);  // search horizon: ~1.2 orbits or 3h max
+  const stepSec = 30;
+  let bestEnd = null;  // earliest LOS time (Date)
+
+  for (const obs of observers) {
+    const obsGd = { longitude: rad(obs.lon), latitude: rad(obs.lat), height: obs.alt };
+    let inPass = false;
+    let lastEl = -90;
+    let lastTime = now.getTime();
+    // Check current state first
+    const pv0 = satellite.propagate(satrec, now);
+    if (pv0.position) {
+      const la0 = satellite.ecfToLookAngles(obsGd, satellite.eciToEcf(pv0.position, satellite.gstime(now)));
+      lastEl = deg(la0.elevation);
+      inPass = lastEl > 0;
+    }
+    for (let t = stepSec * 1000; t <= horizonMin * 60 * 1000; t += stepSec * 1000) {
+      const d = new Date(now.getTime() + t);
+      const pv = satellite.propagate(satrec, d);
+      if (!pv.position) continue;
+      const la = satellite.ecfToLookAngles(obsGd, satellite.eciToEcf(pv.position, satellite.gstime(d)));
+      const el = deg(la.elevation);
+      if (!inPass && el > 0) {
+        inPass = true;
+      } else if (inPass && el <= 0) {
+        // LOS found
+        const losTime = d.getTime();
+        if (bestEnd === null || losTime < bestEnd) bestEnd = losTime;
+        break;  // we only need the next LOS for this observer
+      }
+      lastEl = el; lastTime = d.getTime();
+    }
+  }
+
+  if (bestEnd === null) return periodMin;  // fallback: 1 orbit
+  const minutes = (bestEnd - now.getTime()) / 60000;
+  // Always show at least a few minutes ahead even if currently in a pass that's about to end
+  return Math.max(minutes, 5);
+}
+
 function drawGroundTrack() {
   if (state.trackLayer) map.removeLayer(state.trackLayer);
 
@@ -3232,8 +3460,7 @@ function drawGroundTrack() {
   const group = L.layerGroup();
 
   for (const sat of sats) {
-    const period = (2 * Math.PI / sat.satrec.no);
-    const fwdMin = Math.min(period * 1.5, 240);
+    const period = (2 * Math.PI / sat.satrec.no);  // minutes per orbit
     const backMin = Math.min(period * 0.5, 60);
     const color = sat.color;
     const coreColor = isDark ? '#ffffff' : color;
@@ -3241,6 +3468,18 @@ function drawGroundTrack() {
     const isPrimary = sat.isTarget || sats.length === 1;
     const weightMul = isPrimary ? 1 : 0.7;
     const opacityMul = isPrimary ? 1 : 0.8;
+
+    // Determine how far forward to draw based on trackMode
+    let fwdMin;
+    const mode = state.trackMode || 'pass';
+    if (mode === 'orbit1') fwdMin = period;
+    else if (mode === 'orbit2') fwdMin = period * 2;
+    else if (mode === 'orbit3') fwdMin = period * 3;
+    else {
+      // 'pass' mode: draw until the satellite ends its NEXT pass over any active observer.
+      // If no observer or no upcoming pass within 1 orbit, fall back to a full orbit.
+      fwdMin = computeNextPassEndMinutes(sat.satrec, period);
+    }
 
     const futureSegs = computeGroundTrack(sat.satrec, now, fwdMin, 20);
     const pastSegs = computeGroundTrack(sat.satrec, new Date(now.getTime() - backMin * 60 * 1000), backMin, 20);
@@ -4692,10 +4931,12 @@ function toggleSat(idx, active) {
     ensureTLE(s).then(() => {
       recomputePasses();
       drawGroundTrack();
+      refreshObserverMarkers();
     });
   } else {
     recomputePasses();
     drawGroundTrack();
+    refreshObserverMarkers();
   }
 }
 
@@ -4775,6 +5016,8 @@ function deleteMySat(idx) {
   saveMySatsToStorage();
   renderMySatList();
   recomputePasses();
+  refreshObserverMarkers();
+  drawGroundTrack();
 }
 
 // ============= SATELLITE EDITOR =============
@@ -5259,6 +5502,8 @@ function toggleObserver(id, active) {
   renderObserverList();
   refreshObserverMarkers();
   recomputePasses();
+  // 'pass' track mode depends on observer set, so redraw
+  if (state.trackMode === 'pass') drawGroundTrack();
 }
 
 function setPrimaryObserver(id) {
