@@ -5111,11 +5111,35 @@ function drawSkyView(pos, previewPass = null, previewTime = null, multiEvent = n
   }
 
   // ============== SINGLE-TARGET MODE (original behavior) ==============
-  const passToDraw = previewPass || state.passes.find(p => p && p.aos && p.los && p.los.getTime() > Date.now());
+  // Find the current or next pass for the tracked target.
+  // We use getCurrentOrNextPass (which correctly searches backward for in-progress passes)
+  // rather than state.passes, because state.passes may not include the currently-active pass
+  // if its AOS is in the past.
+  let passToDraw = previewPass;
+  if (!passToDraw && state.target) {
+    // Prefer the cached pass we already compute for the telemetry countdown
+    if (state.nextPassCache && state.nextPassCache.pass) {
+      passToDraw = state.nextPassCache.pass;
+    } else {
+      // Compute on demand if no cache yet
+      try {
+        passToDraw = getCurrentOrNextPass(state.target.satrec, new Date());
+      } catch (_) { passToDraw = null; }
+    }
+  }
 
   if (passToDraw && state.target && passToDraw.aos && passToDraw.los) {
-    // Use the observer associated with this pass (or primary if not specified)
-    const obs = passToDraw.observerId ? findObserver(passToDraw.observerId) : getPrimaryObserver();
+    // Use the observer associated with this pass.
+    // - getCurrentOrNextPass returns `observer` (full obj)
+    // - state.passes entries have `observerId`
+    // - fallback: primary observer
+    let obs = null;
+    if (passToDraw.observer && passToDraw.observer.lat !== undefined) {
+      obs = passToDraw.observer;
+    } else if (passToDraw.observerId) {
+      obs = findObserver(passToDraw.observerId);
+    }
+    if (!obs) obs = getPrimaryObserver();
     if (!obs) return;
     const obsGd = { longitude: rad(obs.lon), latitude: rad(obs.lat), height: obs.alt };
     const pathPts = [];
@@ -5162,27 +5186,43 @@ function drawSkyView(pos, previewPass = null, previewTime = null, multiEvent = n
       if (!previewPass) mainPath.setAttribute('stroke-dasharray', '3 2');
       svg.appendChild(mainPath);
 
-      if (previewPass) {
-        const aosP = pathPts[0];
-        const losP = pathPts[pathPts.length - 1];
-        let tcaP = pathPts[0];
-        pathPts.forEach(p => { if (p.e > tcaP.e) tcaP = p; });
-        addSkyLabel(svg, aosP.x, aosP.y, 'AOS', greenT);
-        addSkyLabel(svg, losP.x, losP.y, 'LOS', redT);
-        addSkyLabel(svg, tcaP.x, tcaP.y, `TCA ${tcaP.e.toFixed(0)}°`, cyanT);
-      }
+      // AOS / LOS / TCA labels (shown in both live and preview modes)
+      const aosP = pathPts[0];
+      const losP = pathPts[pathPts.length - 1];
+      let tcaP = pathPts[0];
+      pathPts.forEach(p => { if (p.e > tcaP.e) tcaP = p; });
+      addSkyLabel(svg, aosP.x, aosP.y, 'AOS', greenT);
+      addSkyLabel(svg, losP.x, losP.y, 'LOS', redT);
+      addSkyLabel(svg, tcaP.x, tcaP.y, `TCA ${tcaP.e.toFixed(0)}°`, cyanT);
     }
   }
 
   // current satellite dot
-  if (pos.el >= 0) {
-    const r = R * (1 - pos.el / 90);
-    const x = cx + r * Math.sin(rad(pos.az));
-    const y = cy - r * Math.cos(rad(pos.az));
+  // Recompute satellite position relative to the pass's observer (not necessarily primary),
+  // so the dot is consistent with the sky path arc drawn above.
+  let dotEl = pos.el, dotAz = pos.az, dotIlluminated = pos.illuminated;
+  if (passToDraw && passToDraw.observer && passToDraw.observer !== getPrimaryObserver()) {
+    try {
+      const obs = passToDraw.observer;
+      const obsGd = { longitude: rad(obs.lon), latitude: rad(obs.lat), height: obs.alt };
+      const dRef = previewTime || new Date();
+      const pvR = satellite.propagate(state.target.satrec, dRef);
+      if (pvR && pvR.position) {
+        const la = satellite.ecfToLookAngles(obsGd, satellite.eciToEcf(pvR.position, satellite.gstime(dRef)));
+        dotEl = deg(la.elevation);
+        dotAz = deg(la.azimuth);
+        // illumination is observer-independent, keep pos.illuminated
+      }
+    } catch (_) { /* fall back to pos values */ }
+  }
+  if (dotEl >= 0) {
+    const r = R * (1 - dotEl / 90);
+    const x = cx + r * Math.sin(rad(dotAz));
+    const y = cy - r * Math.cos(rad(dotAz));
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     const dotColor = previewPass ? magentaT : greenT;
     // If sat is in eclipse, dim the dot and show a shadow ring
-    const eclipse = pos.illuminated === false;
+    const eclipse = dotIlluminated === false;
     const fillColor = eclipse ? '#555' : dotColor;
     const strokeColor = eclipse ? dotColor : (isDark ? '#fff' : dotColor);
     const labelColor = eclipse ? dimT : dotColor;
@@ -5199,7 +5239,7 @@ function drawSkyView(pos, previewPass = null, previewTime = null, multiEvent = n
         ${state.target.name.split(' ')[0]}
       </text>
       <text x="${x+10}" y="${y+3}" fill="${dimT}" font-size="9" font-family="JetBrains Mono">
-        ${pos.el.toFixed(1)}° · ${compass(pos.az)}
+        ${dotEl.toFixed(1)}° · ${compass(dotAz)}
       </text>
       <text x="${x+10}" y="${y+13}" fill="${illumColor}" font-size="9" font-family="JetBrains Mono" font-weight="600">
         ${illumLabel}
