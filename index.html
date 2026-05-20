@@ -3320,14 +3320,15 @@ function updatePassPanelTitle() {
 }
 
 // ============= UI: TARGET LOAD =============
-function setTarget(name, l1, l2, noradId) {
+function setTarget(name, l1, l2, noradId, opts = {}) {
   try {
     const satrec = satellite.twoline2satrec(l1, l2);
     if (satrec.error) {
       showError(`SGP4 init error: ${satrec.error}`);
       return;
     }
-    if (state.preview) {
+    // Exit existing preview unless caller wants to keep it
+    if (state.preview && !opts.skipPreviewExit) {
       state.preview = null;
       document.getElementById('preview-bar').style.display = 'none';
       if (state.passTrackLayer) { map.removeLayer(state.passTrackLayer); state.passTrackLayer = null; }
@@ -3336,7 +3337,7 @@ function setTarget(name, l1, l2, noradId) {
 
     document.getElementById('target-name').textContent = name;
     document.getElementById('target-norad').textContent = state.target.norad ? `NORAD ${state.target.norad}` : '';
-    document.getElementById('track-status').textContent = '◉ TRACKING';
+    document.getElementById('track-status').textContent = state.preview ? '◉ PREVIEW' : '◉ TRACKING';
 
     drawGroundTrack();
     document.getElementById('target-info').innerHTML = `
@@ -3345,28 +3346,30 @@ function setTarget(name, l1, l2, noradId) {
       <strong>MEAN MOTION</strong> ${(satrec.no * 1440 / (2*Math.PI)).toFixed(4)} rev/day
     `;
 
-    const passes = predictAllPasses(satrec, getPassPredictionOptions(), 0);
-    // If multiple sats are active, use combined predictions instead
-    const activeSats = getActiveSats();
-    if (activeSats.length > 0) {
-      state.passes = predictAllSatPasses(getPassPredictionOptions(), 0);
-      document.getElementById('pass-count').textContent =
-        `${state.passes.length} PASSES · ${activeSats.length} SATS · ${getActiveObservers().length} OBS`;
-    } else {
-      // Tag single-target passes with sat name for table display
-      passes.forEach(p => { p.satName = name; p.satNorad = state.target.norad || ''; });
-      state.passes = passes;
-      document.getElementById('pass-count').textContent =
-        `${passes.length} PASSES · ${getActiveObservers().length} OBS`;
+    // Skip recomputing passes when we're just switching target as part of preview
+    // (passes are already computed and preview's passIndex must remain valid)
+    if (!opts.skipPassRecompute) {
+      const passes = predictAllPasses(satrec, getPassPredictionOptions(), 0);
+      const activeSats = getActiveSats();
+      if (activeSats.length > 0) {
+        state.passes = predictAllSatPasses(getPassPredictionOptions(), 0);
+        document.getElementById('pass-count').textContent =
+          `${state.passes.length} PASSES · ${activeSats.length} SATS · ${getActiveObservers().length} OBS`;
+      } else {
+        passes.forEach(p => { p.satName = name; p.satNorad = state.target.norad || ''; });
+        state.passes = passes;
+        document.getElementById('pass-count').textContent =
+          `${passes.length} PASSES · ${getActiveObservers().length} OBS`;
+      }
+      renderPassTable(state.passes);
+      updatePassPanelTitle();
     }
-    renderPassTable(state.passes);
-    updatePassPanelTitle();
 
-    // highlight in My Satellites list
+    // Highlight in My Satellites list
     renderMySatList();
 
-    // On mobile, switch to live data view after target selection
-    if (window.innerWidth <= 900 && window.showPane) {
+    // On mobile, switch to live data view (unless caller suppresses)
+    if (!opts.skipMobileSwitch && window.innerWidth <= 900 && window.showPane) {
       window.showPane('data');
     }
   } catch (e) {
@@ -3857,8 +3860,32 @@ function renderAtTime(when, opts = {}) {
 
 // ============= PREVIEW MODE =============
 function enterPreview(passIndex) {
-  if (!state.passes[passIndex] || !state.target) return;
+  if (!state.passes[passIndex]) return;
   const pass = state.passes[passIndex];
+
+  // Auto-switch target if this pass belongs to a different satellite
+  // (so the map shows the correct satellite's trajectory)
+  if (pass.satNorad || pass.satName) {
+    const passSat = state.mySats.find(s =>
+      (pass.satNorad && s.norad === pass.satNorad) || s.name === pass.satName
+    );
+    const currentNorad = state.target ? state.target.norad : null;
+    const currentName = state.target ? state.target.name : null;
+    const isDifferentSat = passSat && (
+      (pass.satNorad && pass.satNorad !== currentNorad) ||
+      (!pass.satNorad && pass.satName && pass.satName !== currentName)
+    );
+    if (isDifferentSat && passSat.l1 && passSat.l2) {
+      // Switch target without resetting passes or jumping to mobile data view
+      setTarget(passSat.name, passSat.l1, passSat.l2, passSat.norad || '', {
+        skipPassRecompute: true,
+        skipPreviewExit: true,
+        skipMobileSwitch: true,
+      });
+    }
+  }
+
+  if (!state.target) return;
   state.preview = { passIndex, time: pass.maxElTime };
 
   // Show preview bar
@@ -3885,7 +3912,6 @@ function enterPreview(passIndex) {
 
   // On mobile, ensure the user is on the Passes tab so they see both list + map
   if (window.innerWidth <= 900 && window.showPane) {
-    // Only switch if currently on a tab that doesn't show the map
     const currentMode = document.body.getAttribute('data-tab-mode');
     if (currentMode === 'catalog') {
       window.showPane('passes');
