@@ -352,6 +352,8 @@
   }
   .data-value.amber { color: var(--amber); }
   .data-value.green { color: var(--green); }
+  .data-value.cyan { color: var(--cyan); }
+  .data-value.red { color: var(--red); }
   .data-value.red { color: var(--red); }
   .data-value .unit { font-size: 11px; color: var(--text-dim); margin-left: 4px; }
 
@@ -389,7 +391,26 @@
     margin-bottom: 6px;
     padding-bottom: 6px;
     border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
   }
+  .legend-title:hover { color: var(--cyan); filter: brightness(1.2); }
+  #legend-toggle-icon {
+    display: inline-block;
+    transition: transform 0.2s ease;
+    font-size: 11px;
+  }
+  /* Collapsed state: hide body, remove bottom border on title */
+  .map-legend.collapsed .legend-body { display: none; }
+  .map-legend.collapsed .legend-title {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+  .map-legend.collapsed #legend-toggle-icon { transform: rotate(-90deg); }
   .legend-row {
     display: flex;
     align-items: center;
@@ -1124,12 +1145,19 @@
     /* Map legend more compact on mobile */
     .map-legend {
       font-size: 9px;
-      padding: 8px;
+      padding: 6px 8px;
       bottom: 8px;
       left: 8px;
       max-width: 160px;
+      max-height: calc(100% - 20px);
+      overflow-y: auto;
     }
     .legend-row { padding: 2px 0; }
+    /* When collapsed on mobile, shrink to just the header */
+    .map-legend.collapsed {
+      padding: 4px 8px;
+      max-width: 100px;
+    }
 
     /* Preview bar wraps on mobile */
     #preview-bar {
@@ -1314,8 +1342,11 @@
   <main class="col center" data-pane="map">
     <div class="companion-badge">◉ Ground Track</div>
     <div id="map" style="position:relative;">
-      <div class="map-legend">
-        <div class="legend-title">▸ Legend</div>
+      <div class="map-legend" id="map-legend">
+        <div class="legend-title" id="legend-toggle" title="Click to collapse/expand">
+          <span id="legend-toggle-icon">▾</span> Legend
+        </div>
+        <div class="legend-body" id="legend-body">
         <div class="legend-row">
           <div class="legend-swatch" style="background:linear-gradient(90deg,#ffb627,#fff);box-shadow:0 0 8px #ffb627;"></div>
           <span>Future track</span>
@@ -1360,6 +1391,7 @@
           <div class="legend-swatch" style="background:rgba(10,20,60,0.5);border:1px dashed #4a5a90;"></div>
           <span id="night-toggle-label">Night side ◐</span>
         </div>
+        </div><!-- /legend-body -->
       </div>
     </div>
     <div class="footer-bar">
@@ -1427,6 +1459,27 @@
         <div class="data-cell">
           <div class="data-label">Sun @ Observer</div>
           <div class="data-value" id="d-sunel">—</div>
+        </div>
+        <div class="data-cell" style="grid-column: span 2;">
+          <div class="data-label" id="d-next-pass-label">Next Pass</div>
+          <div id="d-next-pass-obs" style="color:var(--text-dim);font-size:10px;margin-bottom:6px;">—</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+            <div>
+              <div class="data-label" style="margin-bottom:2px;" id="d-next-aos-label">AOS in</div>
+              <div class="data-value" id="d-next-aos" style="font-size:14px;line-height:1.1;">—</div>
+              <div style="color:var(--text-dim);font-size:9px;margin-top:2px;" id="d-next-aos-kst">—</div>
+            </div>
+            <div>
+              <div class="data-label" style="margin-bottom:2px;">LOS in</div>
+              <div class="data-value" id="d-next-los" style="font-size:14px;line-height:1.1;">—</div>
+              <div style="color:var(--text-dim);font-size:9px;margin-top:2px;" id="d-next-los-kst">—</div>
+            </div>
+            <div>
+              <div class="data-label" style="margin-bottom:2px;">Duration</div>
+              <div class="data-value" id="d-next-duration" style="font-size:14px;line-height:1.1;">—</div>
+              <div style="color:var(--text-dim);font-size:9px;margin-top:2px;" id="d-next-maxel">—</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -2114,6 +2167,120 @@ setInterval(() => {
   }
 }, 60000);
 
+// ============= NEXT AOS/LOS COUNTDOWN =============
+// Cached pass: { pass: <getCurrentOrNextPass result>, validUntil: ms }
+state.nextPassCache = null;
+
+function clearNextPassDisplay(reasonLabel) {
+  const labelEl = document.getElementById('d-next-pass-label');
+  const obsEl = document.getElementById('d-next-pass-obs');
+  const aosLabelEl = document.getElementById('d-next-aos-label');
+  const aosEl = document.getElementById('d-next-aos');
+  const aosKstEl = document.getElementById('d-next-aos-kst');
+  const losEl = document.getElementById('d-next-los');
+  const losKstEl = document.getElementById('d-next-los-kst');
+  const durEl = document.getElementById('d-next-duration');
+  const maxElEl = document.getElementById('d-next-maxel');
+  if (labelEl) labelEl.textContent = reasonLabel || 'Next Pass';
+  if (obsEl) obsEl.textContent = '—';
+  if (aosLabelEl) aosLabelEl.textContent = 'AOS in';
+  if (aosEl) { aosEl.textContent = '—'; aosEl.className = 'data-value'; aosEl.style.fontSize = '14px'; aosEl.style.lineHeight = '1.1'; }
+  if (aosKstEl) aosKstEl.textContent = '—';
+  if (losEl) { losEl.textContent = '—'; losEl.className = 'data-value'; losEl.style.fontSize = '14px'; losEl.style.lineHeight = '1.1'; }
+  if (losKstEl) losKstEl.textContent = '—';
+  if (durEl) { durEl.textContent = '—'; durEl.className = 'data-value'; durEl.style.fontSize = '14px'; durEl.style.lineHeight = '1.1'; }
+  if (maxElEl) maxElEl.textContent = '—';
+}
+
+function updateNextPassDisplay() {
+  const labelEl = document.getElementById('d-next-pass-label');
+  if (!labelEl) return;
+
+  // No target, no observers, or in preview mode → clear display
+  if (!state.target || !getActiveObservers().length || state.preview) {
+    clearNextPassDisplay();
+    return;
+  }
+
+  const now = Date.now();
+  // Recompute pass if cache is empty or expired
+  if (!state.nextPassCache || state.nextPassCache.validUntil <= now) {
+    const pass = getCurrentOrNextPass(state.target.satrec, new Date(now));
+    if (!pass) {
+      clearNextPassDisplay('Next Pass');
+      document.getElementById('d-next-pass-obs').textContent = 'no pass in 24h';
+      state.nextPassCache = { pass: null, validUntil: now + 60000 };
+      return;
+    }
+    state.nextPassCache = {
+      pass,
+      // Cache valid until just after the LOS — then recompute for the following pass
+      validUntil: pass.los.getTime() + 1000,
+    };
+  }
+
+  const p = state.nextPassCache.pass;
+  if (!p) return;
+
+  const aosMs = p.aos.getTime() - now;
+  const losMs = p.los.getTime() - now;
+  const inProgress = aosMs <= 0 && losMs > 0;
+
+  const obsEl = document.getElementById('d-next-pass-obs');
+  const aosLabelEl = document.getElementById('d-next-aos-label');
+  const aosEl = document.getElementById('d-next-aos');
+  const aosKstEl = document.getElementById('d-next-aos-kst');
+  const losEl = document.getElementById('d-next-los');
+  const losKstEl = document.getElementById('d-next-los-kst');
+  const durEl = document.getElementById('d-next-duration');
+  const maxElEl = document.getElementById('d-next-maxel');
+
+  // Header label and observer name
+  if (inProgress) {
+    labelEl.innerHTML = `Current Pass · <span style="color:var(--amber);">◉ LIVE</span>`;
+  } else {
+    labelEl.textContent = 'Next Pass';
+  }
+  obsEl.innerHTML = `<span style="color:${p.observer.color};">●</span> ${p.observer.name}`;
+
+  // AOS column
+  if (inProgress) {
+    // AOS is in the past — show "elapsed" time instead of countdown
+    aosLabelEl.textContent = 'AOS';
+    aosEl.textContent = `−${fmtCountdown(-aosMs)}`;
+    aosEl.className = 'data-value';
+    aosEl.style.color = 'var(--text-dim)';
+  } else {
+    aosLabelEl.textContent = 'AOS in';
+    aosEl.textContent = fmtCountdown(aosMs);
+    aosEl.className = 'data-value cyan';
+    aosEl.style.color = '';
+  }
+  aosKstEl.textContent = `${fmtKSTTime(p.aos)} KST`;
+
+  // LOS column
+  losEl.textContent = fmtCountdown(losMs);
+  losEl.className = inProgress ? 'data-value amber' : 'data-value';
+  losKstEl.textContent = `${fmtKSTTime(p.los)} KST`;
+
+  // Duration column + Max elevation
+  durEl.textContent = fmtCountdown(p.duration);
+  durEl.className = 'data-value';
+  durEl.style.color = 'var(--text)';
+  maxElEl.innerHTML = `Max El <span style="color:var(--cyan);">${p.maxEl.toFixed(1)}°</span>`;
+}
+
+// Invalidate cache when target changes, observers change, etc.
+function invalidateNextPassCache() {
+  state.nextPassCache = null;
+  updateNextPassDisplay();
+}
+
+// Update the countdown every second
+setInterval(updateNextPassDisplay, 1000);
+// Initial render
+updateNextPassDisplay();
+
 // Night overlay toggle (in map legend)
 document.getElementById('night-toggle').addEventListener('click', () => {
   state.showNight = !state.showNight;
@@ -2131,6 +2298,39 @@ document.getElementById('footprint-toggle').addEventListener('click', () => {
   label.style.opacity = state.showFootprints ? '1' : '0.5';
   refreshObserverMarkers();
 });
+
+// Legend collapse/expand toggle
+(function setupLegendToggle() {
+  const legend = document.getElementById('map-legend');
+  const toggle = document.getElementById('legend-toggle');
+  if (!legend || !toggle) return;
+  const KEY = 'orbital_legend_collapsed_v1';
+
+  // Determine initial state:
+  // - Read from localStorage if set
+  // - On mobile (≤900px), default to COLLAPSED
+  // - On desktop, default to EXPANDED
+  let collapsed;
+  try {
+    const stored = localStorage.getItem(KEY);
+    if (stored === 'true') collapsed = true;
+    else if (stored === 'false') collapsed = false;
+    else collapsed = window.innerWidth <= 900;  // default by viewport
+  } catch (_) {
+    collapsed = window.innerWidth <= 900;
+  }
+
+  function applyState() {
+    legend.classList.toggle('collapsed', collapsed);
+  }
+  applyState();
+
+  toggle.addEventListener('click', () => {
+    collapsed = !collapsed;
+    applyState();
+    try { localStorage.setItem(KEY, String(collapsed)); } catch (_) {}
+  });
+})();
 
 // Track length mode selector
 const trackModeSelect = document.getElementById('track-mode-select');
@@ -3334,6 +3534,7 @@ function setTarget(name, l1, l2, noradId, opts = {}) {
       if (state.passTrackLayer) { map.removeLayer(state.passTrackLayer); state.passTrackLayer = null; }
     }
     state.target = { name, l1, l2, satrec, norad: noradId || extractNorad(l1) };
+    state.nextPassCache = null;
 
     document.getElementById('target-name').textContent = name;
     document.getElementById('target-norad').textContent = state.target.norad ? `NORAD ${state.target.norad}` : '';
@@ -3723,6 +3924,186 @@ function liveTick() {
 }
 setInterval(liveTick, 1000);
 
+// Find the current or next pass (whichever applies) for the target satellite across active observers.
+// Returns the pass with earliest LOS (so we report whichever pass is "closing first"), with:
+//   { aos: Date, los: Date, maxEl, maxElTime, observer, inProgress: bool }
+// Returns null if no pass found within search horizon.
+function getCurrentOrNextPass(satrec, fromDate) {
+  const observers = getActiveObservers();
+  if (!observers.length) return null;
+  const now = fromDate || new Date();
+  const horizonMin = 24 * 60;  // search up to 24h ahead
+  const stepSec = 60;
+
+  let bestPass = null;  // pass with smallest LOS time
+
+  for (const obs of observers) {
+    const obsGd = { longitude: rad(obs.lon), latitude: rad(obs.lat), height: obs.alt };
+    const pv0 = satellite.propagate(satrec, now);
+    if (!pv0.position) continue;
+    const la0 = satellite.ecfToLookAngles(obsGd, satellite.eciToEcf(pv0.position, satellite.gstime(now)));
+    let prevEl = deg(la0.elevation);
+    const inProgress = prevEl > 0;
+
+    // For "in progress" passes, the AOS is in the past; we'll search backward briefly to find it.
+    // For "upcoming" passes, both AOS and LOS are in the future.
+    let aos = null, los = null;
+    let maxEl = -90, maxElTime = null;
+
+    if (inProgress) {
+      // Search backward for AOS (sat just rose; AOS is in the recent past)
+      // Look back up to 1.5 orbital periods
+      const period = (2 * Math.PI / satrec.no);
+      const backMs = Math.min(period * 1.5, 200) * 60 * 1000;
+      let bPrevEl = prevEl;
+      for (let t = stepSec * 1000; t <= backMs; t += stepSec * 1000) {
+        const d = new Date(now.getTime() - t);
+        const pv = satellite.propagate(satrec, d);
+        if (!pv.position) continue;
+        const la = satellite.ecfToLookAngles(obsGd, satellite.eciToEcf(pv.position, satellite.gstime(d)));
+        const el = deg(la.elevation);
+        if (el <= 0 && bPrevEl > 0) {
+          // Crossing found between (d) and (d + stepSec): satellite rose at this point
+          aos = refineCrossing(satrec, d.getTime(), d.getTime() + stepSec * 1000, 0, obsGd, true).date;
+          break;
+        }
+        bPrevEl = el;
+      }
+      if (!aos) aos = now;  // fallback (rare): treat now as AOS
+      // Capture current elevation as starting max
+      maxEl = prevEl; maxElTime = now;
+    }
+
+    // Walk forward
+    for (let t = stepSec * 1000; t <= horizonMin * 60 * 1000; t += stepSec * 1000) {
+      const d = new Date(now.getTime() + t);
+      const pv = satellite.propagate(satrec, d);
+      if (!pv.position) continue;
+      const la = satellite.ecfToLookAngles(obsGd, satellite.eciToEcf(pv.position, satellite.gstime(d)));
+      const el = deg(la.elevation);
+
+      if (!aos) {
+        // Looking for AOS (rising edge)
+        if (prevEl <= 0 && el > 0) {
+          aos = refineCrossing(satrec, d.getTime() - stepSec * 1000, d.getTime(), 0, obsGd, true).date;
+          maxEl = el; maxElTime = d;
+        }
+      } else {
+        // We have AOS; track max elevation and find LOS
+        if (el > maxEl) { maxEl = el; maxElTime = d; }
+        if (prevEl > 0 && el <= 0) {
+          los = refineCrossing(satrec, d.getTime() - stepSec * 1000, d.getTime(), 0, obsGd, false).date;
+          break;
+        }
+      }
+      prevEl = el;
+    }
+
+    if (aos && los) {
+      const candidate = {
+        aos, los,
+        maxEl, maxElTime: maxElTime || aos,
+        duration: los.getTime() - aos.getTime(),
+        observer: obs,
+        inProgress,
+      };
+      // Prefer the pass with the earliest LOS — that's the one closing first / most relevant
+      if (!bestPass || candidate.los.getTime() < bestPass.los.getTime()) {
+        bestPass = candidate;
+      }
+    }
+  }
+
+  return bestPass;
+}
+
+// Find the immediately upcoming AOS/LOS event for the current target across all active observers.
+// Returns: {
+//   type: 'aos' | 'los',          // what comes next
+//   when: Date,                   // when that event happens
+//   observer: <observer obj>,     // which observer
+//   pairedTime: Date,             // for 'aos': the LOS of that same pass; for 'los': the AOS of the next pass after current
+//   inPass: bool,                 // is the satellite currently above horizon for `observer`?
+// }
+// or null if no upcoming pass found.
+function getNextPassEvent(satrec, fromDate) {
+  const observers = getActiveObservers();
+  if (!observers.length) return null;
+  const now = fromDate || new Date();
+  const period = (2 * Math.PI / satrec.no);  // minutes
+  // Search up to 24 hours ahead. Use 60s step (refineCrossing brings precision to <1s).
+  const horizonMin = 24 * 60;
+  const stepSec = 60;
+
+  let best = null;  // earliest event across observers
+
+  for (const obs of observers) {
+    const obsGd = { longitude: rad(obs.lon), latitude: rad(obs.lat), height: obs.alt };
+    // Check current state
+    const pv0 = satellite.propagate(satrec, now);
+    if (!pv0.position) continue;
+    const la0 = satellite.ecfToLookAngles(obsGd, satellite.eciToEcf(pv0.position, satellite.gstime(now)));
+    const startEl = deg(la0.elevation);
+    const inPass = startEl > 0;
+
+    // Walk forward to find next transition
+    let prevEl = startEl;
+    let lookingFor = inPass ? 'los' : 'aos';
+    let firstFoundTime = null;
+    let pairedTime = null;
+
+    for (let t = stepSec * 1000; t <= horizonMin * 60 * 1000; t += stepSec * 1000) {
+      const d = new Date(now.getTime() + t);
+      const pv = satellite.propagate(satrec, d);
+      if (!pv.position) continue;
+      const la = satellite.ecfToLookAngles(obsGd, satellite.eciToEcf(pv.position, satellite.gstime(d)));
+      const el = deg(la.elevation);
+
+      if (lookingFor === 'aos' && prevEl <= 0 && el > 0) {
+        firstFoundTime = refineCrossing(satrec, d.getTime() - stepSec * 1000, d.getTime(), 0, obsGd, true).date;
+        lookingFor = 'los_after_aos';
+      } else if (lookingFor === 'los_after_aos' && prevEl > 0 && el <= 0) {
+        pairedTime = refineCrossing(satrec, d.getTime() - stepSec * 1000, d.getTime(), 0, obsGd, false).date;
+        break;
+      } else if (lookingFor === 'los' && prevEl > 0 && el <= 0) {
+        firstFoundTime = refineCrossing(satrec, d.getTime() - stepSec * 1000, d.getTime(), 0, obsGd, false).date;
+        lookingFor = 'aos_after_los';
+      } else if (lookingFor === 'aos_after_los' && prevEl <= 0 && el > 0) {
+        pairedTime = refineCrossing(satrec, d.getTime() - stepSec * 1000, d.getTime(), 0, obsGd, true).date;
+        break;
+      }
+      prevEl = el;
+    }
+
+    if (firstFoundTime) {
+      const candidate = {
+        type: inPass ? 'los' : 'aos',
+        when: firstFoundTime,
+        observer: obs,
+        pairedTime,
+        inPass,
+      };
+      if (!best || candidate.when.getTime() < best.when.getTime()) {
+        best = candidate;
+      }
+    }
+  }
+
+  return best;
+}
+
+// Format a duration in milliseconds as e.g. "1h 23m 45s" or "12m 34s" or "45s"
+function fmtCountdown(ms) {
+  if (ms < 0) ms = 0;
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h ${pad2(m)}m ${pad2(s)}s`;
+  if (m > 0) return `${m}m ${pad2(s)}s`;
+  return `${s}s`;
+}
+
 function renderAtTime(when, opts = {}) {
   if (!state.target) return;
   // In preview mode, sync the night/day overlay to the preview time
@@ -3938,6 +4319,9 @@ function exitPreview() {
   renderAtTime(new Date(), { isPreview: false });
   // Restore night overlay to current time
   refreshNightLayer();
+  // Refresh next-pass countdown
+  state.nextPassCache = null;
+  updateNextPassDisplay();
 }
 
 function renderPreviewAt(sliderValue) {
@@ -5528,6 +5912,7 @@ function toggleObserver(id, active) {
   renderObserverList();
   refreshObserverMarkers();
   recomputePasses();
+  state.nextPassCache = null;
   // 'pass' track mode depends on observer set, so redraw
   if (state.trackMode === 'pass') drawGroundTrack();
 }
