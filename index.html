@@ -6178,7 +6178,43 @@ function showError(msg) {
 }
 
 // ============= AUTO-LOAD =============
-// My Satellites loads automatically via trackMySat(0) above.
+// On startup, fetch TLEs for all active satellites in parallel so that observer footprints
+// (which need satellite altitudes) display immediately. Then auto-track the first sat.
+(async function autoLoadActiveSats() {
+  const activeWithNorad = state.mySats.filter(s => s.active && s.norad && !s.l1);
+  if (!activeWithNorad.length) {
+    // Nothing to fetch; but if any active sats have cached TLEs, refresh footprints
+    if (state.mySats.some(s => s.active && s.l1)) {
+      refreshObserverMarkers();
+    }
+    // Auto-track first sat if available
+    if (state.mySats.length) {
+      setTimeout(() => trackMySat(0), 100);
+    }
+    return;
+  }
+
+  // Fetch all in parallel
+  try {
+    const fetched = await fetchByNoradList(activeWithNorad);
+    let updated = 0;
+    for (const f of fetched) {
+      const s = state.mySats.find(x => x.norad === f.norad);
+      if (s) { s.l1 = f.l1; s.l2 = f.l2; updated++; }
+    }
+    if (updated > 0) {
+      saveMySatsToStorage();
+      renderMySatList();
+      refreshObserverMarkers();  // now footprints can be drawn
+      drawGroundTrack();          // and ground tracks for the active sats
+    }
+  } catch (_) { /* network errors handled by trackMySat below */ }
+
+  // Auto-track first satellite to initialize telemetry
+  if (state.mySats.length) {
+    setTimeout(() => trackMySat(0), 50);
+  }
+})();
 
 } // end initApp
 
