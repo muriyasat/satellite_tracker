@@ -206,11 +206,12 @@
   /* Layout */
   .container {
     display: grid;
-    grid-template-columns: 340px 1fr 340px;
+    grid-template-columns: var(--col-left, 340px) 1fr var(--col-right, 340px);
     grid-template-rows: 1fr auto;
     gap: 1px;
     background: var(--border);
     min-height: calc(100vh - 60px);
+    position: relative;
   }
   .col { background: var(--bg); padding: 18px; overflow-y: auto; }
   .col.center { padding: 0; display: flex; flex-direction: column; }
@@ -218,6 +219,7 @@
     grid-column: 1 / -1;
     background: var(--bg);
     border-top: 1px solid var(--border);
+    position: relative;
   }
 
   /* Panel */
@@ -368,6 +370,140 @@
     filter: var(--map-filter);
   }
   .leaflet-container { background: var(--bg-2); }
+
+  /* ===== 3D GLOBE VIEW ===== */
+  .col.center { position: relative; }
+  #globe-wrap {
+    flex: 1;
+    min-height: 400px;
+    position: relative;
+    display: none;
+    background: radial-gradient(ellipse at 50% 40%, #0a141f 0%, #04070b 70%, #020407 100%);
+    overflow: hidden;
+  }
+  #globe-wrap.active { display: block; }
+  #globe-canvas { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  #globe-canvas:active { cursor: grabbing; }
+  #globe-wrap.loading::after {
+    content: '◍ INITIALIZING ORBITAL VIEW…';
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--cyan); font-size: 12px; letter-spacing: 0.2em;
+    text-shadow: var(--glow-cyan);
+  }
+  /* View toggle (2D / 3D) — top-right overlay */
+  #view-toggle {
+    position: absolute;
+    top: 10px; right: 10px;
+    z-index: 600;
+    display: flex;
+    border: 1px solid var(--border-bright);
+    background: rgba(7, 9, 13, 0.92);
+    backdrop-filter: blur(4px);
+  }
+  .view-toggle-btn {
+    background: transparent;
+    color: var(--text-dim);
+    border: none;
+    border-left: 1px solid var(--border);
+    padding: 6px 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: color 0.15s, background 0.15s;
+  }
+  .view-toggle-btn:first-child { border-left: none; }
+  .view-toggle-btn:hover { color: var(--text); }
+  .view-toggle-btn.active {
+    color: var(--cyan);
+    background: rgba(0, 229, 255, 0.10);
+    text-shadow: var(--glow-cyan);
+  }
+  /* Globe HUD legend */
+  .globe-hud {
+    position: absolute;
+    bottom: 40px; left: 12px;
+    z-index: 600;
+    background: rgba(7, 9, 13, 0.92);
+    border: 1px solid var(--border-bright);
+    padding: 10px 12px;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    backdrop-filter: blur(4px);
+    color: var(--text-dim);
+    max-width: 180px;
+  }
+  .globe-hud .legend-title {
+    color: var(--cyan);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .globe-hud .legend-title:hover { filter: brightness(1.2); }
+  #globe-hud-icon {
+    display: inline-block;
+    transition: transform 0.2s ease;
+    font-size: 11px;
+  }
+  .globe-hud.collapsed .globe-hud-body { display: none; }
+  .globe-hud.collapsed .legend-title {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+  .globe-hud.collapsed #globe-hud-icon { transform: rotate(-90deg); }
+  .globe-hud-btns { display: flex; gap: 4px; margin-top: 8px; }
+  .globe-mini-btn {
+    flex: 1;
+    background: var(--panel-2);
+    color: var(--cyan);
+    border: 1px solid var(--cyan-dim);
+    padding: 4px 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    text-transform: uppercase;
+  }
+  .globe-mini-btn:hover { filter: brightness(1.25); }
+  .globe-mini-btn.active {
+    background: rgba(0, 229, 255, 0.12);
+    box-shadow: var(--glow-cyan);
+  }
+  .globe-mini-btn.nope {
+    border-color: var(--red);
+    color: var(--red);
+    animation: globe-nope 0.4s ease;
+  }
+  @keyframes globe-nope {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-3px); }
+    75% { transform: translateX(3px); }
+  }
+  .globe-hint {
+    margin-top: 8px;
+    font-size: 9px;
+    color: var(--text-faint);
+    letter-spacing: 0.05em;
+    text-transform: none;
+  }
+  .globe-error {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; text-align: center; padding: 30px;
+    color: var(--red); font-size: 13px; letter-spacing: 0.1em;
+  }
+  .globe-error .sub { color: var(--text-faint); font-size: 11px; letter-spacing: 0.05em; }
 
   /* Map legend */
   .map-legend {
@@ -812,6 +948,38 @@
     background: var(--cyan);
     box-shadow: var(--glow-cyan);
   }
+  .view-mode-switcher {
+    display: flex;
+    gap: 0;
+    margin-left: 6px;
+  }
+  .view-mode-btn {
+    background: transparent;
+    border: 1px solid var(--border-bright);
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    padding: 6px 8px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.15s;
+    white-space: nowrap;
+    margin-left: -1px;  /* collapse borders between adjacent buttons */
+  }
+  .view-mode-btn:first-child { margin-left: 0; }
+  .view-mode-btn:hover { color: var(--text); background: var(--panel-2); }
+  .view-mode-btn.active {
+    color: var(--bg);
+    background: var(--cyan);
+    border-color: var(--cyan);
+    box-shadow: var(--glow-cyan);
+    z-index: 1;
+    position: relative;
+  }
+  /* Reset Layout button only shows in fold mode */
+  .fold-only-btn { display: none; margin-left: 6px; }
+  body.fold-mode .fold-only-btn { display: inline-block; }
 
   .header-left { display: flex; align-items: center; gap: 14px; }
   .menu-btn {
@@ -1176,6 +1344,411 @@
     .status-item { font-size: 9px; }
     .theme-switcher { order: -1; }
   }
+
+  /* ============= FORCE DESKTOP MODE ============= */
+  /* When user forces desktop layout, override mobile media query rules.
+     These selectors win because they're declared later and use specific overrides. */
+  body.force-desktop .mobile-tabs { display: none !important; }
+  body.force-desktop .desktop-only { display: inline-flex !important; }
+  body.force-desktop .mobile-only { display: none !important; }
+  /* Restore desktop 3-column grid layout */
+  body.force-desktop .container {
+    display: grid !important;
+    grid-template-columns: var(--col-left, 320px) 1fr var(--col-right, 320px);
+    gap: 12px;
+    padding: 12px;
+    background: var(--bg);
+    flex-direction: row !important;
+  }
+  body.force-desktop .col {
+    display: flex !important;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  body.force-desktop .col.center { display: flex !important; }
+  body.force-desktop [data-pane] {
+    display: block !important;
+    order: unset !important;
+  }
+  body.force-desktop .passes-wrap { display: block !important; }
+  body.force-desktop .companion-badge { display: none !important; }
+  body.force-desktop #map {
+    min-height: unset !important;
+    height: 100%;
+  }
+  body.force-desktop header {
+    flex-wrap: nowrap;
+    padding: 12px 18px;
+  }
+  body.force-desktop .logo { font-size: 22px; }
+  body.force-desktop .logo .sub { display: inline; }
+  body.force-desktop .status-bar {
+    width: auto;
+    font-size: 11px;
+  }
+  body.force-desktop .theme-btn { width: 32px; height: 32px; font-size: 14px; }
+  /* Map legend full size in forced desktop */
+  body.force-desktop .map-legend {
+    font-size: 10px;
+    padding: 10px;
+    max-width: 200px;
+  }
+  /* Pass table back to desktop layout (table, not card stack) */
+  body.force-desktop .pass-table tr { display: table-row !important; }
+  body.force-desktop .pass-table td {
+    display: table-cell !important;
+    padding: 8px 6px !important;
+    border-bottom: 1px solid var(--border) !important;
+    padding-left: 6px !important;
+  }
+  body.force-desktop .pass-table td::before { display: none !important; }
+  body.force-desktop .pass-table thead { display: table-header-group !important; }
+  /* Time range grid back to 2 columns */
+  body.force-desktop .time-range-grid { grid-template-columns: 1fr 1fr !important; }
+  /* Companion map style off */
+  body.force-desktop .companion-pane { display: block !important; }
+
+  /* ============= COLLAPSIBLE PANELS ============= */
+  .panel-collapse-chevron {
+    display: inline-block;
+    color: var(--text-dim);
+    font-size: 11px;
+    transition: transform 0.2s ease, color 0.15s;
+    user-select: none;
+  }
+  .panel-header-collapsible:hover .panel-collapse-chevron {
+    color: var(--cyan);
+  }
+  .panel.panel-collapsed .panel-body { display: none !important; }
+  .panel.panel-collapsed .panel-header {
+    border-bottom: none;
+  }
+  /* Generalized collapse: hide every panel child except the header
+     (covers telemetry's .data-grid, sky view's .skyview-wrap, pass table, etc.) */
+  .panel.panel-collapsed > *:not(.panel-header) { display: none !important; }
+
+  /* ============= DESKTOP DRAG-RESIZE HANDLES ============= */
+  /* Vertical handles between columns + a horizontal handle above the passes panel.
+     Shown only in the 3-column desktop grid (toggled by JS); hidden on mobile/fold. */
+  .col-resizer {
+    position: absolute;
+    width: 12px;
+    margin-left: -6px;
+    z-index: 750;
+    cursor: col-resize;
+    display: none;
+    background: transparent;
+    touch-action: none;
+  }
+  .col-resizer::after {
+    content: '';
+    position: absolute;
+    left: 50%; top: 0; bottom: 0;
+    width: 1px;
+    transform: translateX(-0.5px);
+    background: var(--border-bright);
+    transition: background 0.15s, box-shadow 0.15s, width 0.15s;
+  }
+  .col-resizer:hover::after, .col-resizer.dragging::after {
+    background: var(--cyan);
+    box-shadow: var(--glow-cyan);
+    width: 2px;
+  }
+  .pass-resizer {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 14px;
+    margin-top: -7px;
+    z-index: 750;
+    cursor: row-resize;
+    display: none;
+    background: transparent;
+    touch-action: none;
+  }
+  .pass-resizer::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; top: 50%;
+    height: 1px;
+    transform: translateY(-0.5px);
+    background: var(--border-bright);
+    transition: background 0.15s, box-shadow 0.15s, height 0.15s;
+  }
+  .pass-resizer:hover::after, .pass-resizer.dragging::after {
+    background: var(--cyan);
+    box-shadow: var(--glow-cyan);
+    height: 2px;
+  }
+
+  /* When the passes panel has been drag-resized, the bottom row becomes a fixed
+     height (--passes-h) and the top row (map + side columns) takes the rest, so
+     dragging up genuinely shrinks the map. Only active in the desktop 3-col grid. */
+  body:not(.fold-mode) .container.passes-resized {
+    grid-template-rows: minmax(0, 1fr) var(--passes-h, auto);
+  }
+  body:not(.fold-mode) .container.passes-resized .col { min-height: 0; }
+  body:not(.fold-mode) .container.passes-resized .col.center { min-height: 0; }
+  body:not(.fold-mode) .container.passes-resized #map,
+  body:not(.fold-mode) .container.passes-resized #globe-wrap { min-height: 0; }
+  body:not(.fold-mode) .container.passes-resized .passes-wrap {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  body:not(.fold-mode) .container.passes-resized .passes-wrap > .panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1 1 auto;
+  }
+  body:not(.fold-mode) .container.passes-resized #pass-panel-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none !important;
+  }
+
+  /* ============= FOLD MODE (Z Fold etc.) =============
+     2-column layout optimized for the ~2184x1968 near-square unfolded display.
+     - Left half: map only (always visible, large viewing area)
+     - Right half: stacked panels for telemetry, observers/sats, and pass predictions
+     This mirrors the natural foldable workflow: keep watching the map while operating
+     controls on the other half. */
+
+  body.fold-mode.force-desktop .container {
+    /* Column/row sizes driven by CSS variables so the user can drag-resize them.
+       Defaults: map = 1fr, controls = 1fr; rows data:catalog:passes = 2:2:3 */
+    grid-template-columns: var(--fold-map-fr, 1fr) 6px var(--fold-ctrl-fr, 1fr) !important;
+    grid-template-rows:
+      minmax(0, var(--fold-data-fr, 2fr)) 6px
+      minmax(0, var(--fold-catalog-fr, 2fr)) 6px
+      minmax(0, var(--fold-passes-fr, 3fr)) !important;
+    grid-template-areas:
+      "map  colsplit data"
+      "map  colsplit rowsplit1"
+      "map  colsplit catalog"
+      "map  colsplit rowsplit2"
+      "map  colsplit passes" !important;
+    gap: 0 !important;
+    padding: 10px !important;
+    height: calc(100vh - 70px);
+    overflow: hidden;
+  }
+  body.fold-mode.force-desktop [data-pane="map"] {
+    grid-area: map !important;
+    height: 100% !important;
+    min-height: 0;
+    margin-right: 4px;
+  }
+  body.fold-mode.force-desktop [data-pane="data"] {
+    grid-area: data !important;
+    overflow-y: auto;
+    min-height: 0;
+    margin-bottom: 4px;
+  }
+  body.fold-mode.force-desktop [data-pane="catalog"] {
+    grid-area: catalog !important;
+    overflow-y: auto;
+    min-height: 0;
+    margin-bottom: 4px;
+  }
+  body.fold-mode.force-desktop [data-pane="passes"] {
+    grid-area: passes !important;
+    display: flex !important;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  /* Drag handles for resizing */
+  body.fold-mode.force-desktop .fold-resizer { display: block !important; }
+  .fold-resizer { display: none; position: relative; z-index: 50; }
+  .fold-resizer-col {
+    grid-area: colsplit;
+    cursor: col-resize;
+    background: var(--border);
+    transition: background 0.15s;
+  }
+  .fold-resizer-col:hover, .fold-resizer-col.dragging { background: var(--cyan); }
+  .fold-resizer-row1 { grid-area: rowsplit1; }
+  .fold-resizer-row2 { grid-area: rowsplit2; }
+  .fold-resizer-row1, .fold-resizer-row2 {
+    cursor: row-resize;
+    background: var(--border);
+    transition: background 0.15s;
+    margin: 0 0 4px 0;
+  }
+  .fold-resizer-row1:hover, .fold-resizer-row2:hover,
+  .fold-resizer-row1.dragging, .fold-resizer-row2.dragging { background: var(--cyan); }
+  /* Grab dots indicator on handles */
+  .fold-resizer-col::after {
+    content: '⋮';
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--bg);
+    font-size: 10px;
+    line-height: 1;
+  }
+  .fold-resizer-row1::after, .fold-resizer-row2::after {
+    content: '⋯';
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--bg);
+    font-size: 10px;
+    line-height: 1;
+  }
+  body.fold-mode.force-desktop #map {
+    height: 100% !important;
+    min-height: 300px !important;
+  }
+  /* Pass predictions panel — fill the grid cell, internal scroll for the table body */
+  body.fold-mode.force-desktop [data-pane="passes"] > .panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    margin: 0;
+    height: 100%;
+  }
+  body.fold-mode.force-desktop [data-pane="passes"] .panel-header {
+    flex-shrink: 0;
+  }
+  body.fold-mode.force-desktop #pass-panel-body {
+    flex: 1 1 auto;
+    overflow-y: auto !important;
+    overflow-x: auto;
+    min-height: 0;
+    max-height: none !important;
+    height: auto !important;
+  }
+
+  /* Header */
+  body.fold-mode header {
+    padding: 14px 24px;
+  }
+  body.fold-mode .logo { font-size: 28px; }
+  body.fold-mode .logo .sub { font-size: 13px; }
+  body.fold-mode .status-bar { font-size: 13px; gap: 16px; }
+  body.fold-mode .status-item .val { font-size: 14px; }
+  body.fold-mode .theme-btn {
+    width: 42px; height: 42px;
+    font-size: 18px;
+  }
+  body.fold-mode .view-mode-btn {
+    font-size: 11px;
+    padding: 10px 14px;
+  }
+
+  /* Panel headers */
+  body.fold-mode .panel-header { padding: 12px 16px; }
+  body.fold-mode .panel-title { font-size: 12px; letter-spacing: 0.18em; }
+  body.fold-mode .panel-body { padding: 14px 16px; font-size: 13px; }
+
+  /* Telemetry — fits in right column (~half screen, plenty of room) */
+  body.fold-mode .telemetry-grid {
+    grid-template-columns: 1fr 1fr 1fr !important;
+    gap: 10px !important;
+  }
+  body.fold-mode .data-cell { padding: 11px 13px; }
+  body.fold-mode .data-label { font-size: 11px; letter-spacing: 0.12em; }
+  body.fold-mode .data-value { font-size: 22px; }
+  body.fold-mode .data-value .unit { font-size: 12px; }
+
+  /* Sky view sits next to telemetry — fits within half-screen width */
+  body.fold-mode .skyview-wrap svg { max-width: 320px; width: 100%; }
+
+  /* Buttons — comfortable touch */
+  body.fold-mode .btn {
+    padding: 11px 14px;
+    font-size: 12px;
+    min-height: 42px;
+  }
+  body.fold-mode .observer-btn {
+    width: 30px; height: 30px;
+    font-size: 14px;
+  }
+  body.fold-mode .observer-checkbox {
+    transform: scale(1.25);
+    margin: 0 8px;
+  }
+  body.fold-mode .observer-item,
+  body.fold-mode .my-sat-item {
+    padding: 13px 14px;
+    gap: 12px;
+  }
+  body.fold-mode .observer-name,
+  body.fold-mode .my-sat-name { font-size: 13px; }
+  body.fold-mode .observer-coords,
+  body.fold-mode .my-sat-meta { font-size: 11px; }
+
+  /* Observers and Satellites stacked vertically in catalog pane (1-column for clarity) */
+  body.fold-mode.force-desktop [data-pane="catalog"] {
+    display: flex !important;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  /* Pass mode toggle */
+  body.fold-mode .pass-mode-btn {
+    padding: 9px 13px;
+    font-size: 11px;
+    min-height: 34px;
+  }
+  /* Pass table — readable size; we have narrower width so use slightly smaller font than before */
+  body.fold-mode .pass-table { font-size: 12px; }
+  body.fold-mode .pass-table th {
+    padding: 9px 6px !important;
+    font-size: 10px;
+  }
+  body.fold-mode .pass-table td {
+    padding: 9px 6px !important;
+    font-size: 12px !important;
+  }
+  body.fold-mode .pass-table td.num-cell { font-size: 12px !important; }
+  body.fold-mode .small,
+  body.fold-mode .kst-line { font-size: 10px; }
+
+  /* Inputs */
+  body.fold-mode input[type="text"],
+  body.fold-mode input[type="number"],
+  body.fold-mode input[type="datetime-local"],
+  body.fold-mode select,
+  body.fold-mode textarea {
+    font-size: 13px;
+    padding: 10px 12px;
+    min-height: 40px;
+  }
+  body.fold-mode label {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+  }
+
+  /* Map legend */
+  body.fold-mode .map-legend {
+    font-size: 12px;
+    padding: 12px 14px;
+    max-width: 220px;
+  }
+  body.fold-mode .legend-title { font-size: 11px; padding-bottom: 8px; margin-bottom: 8px; }
+  body.fold-mode .legend-row { padding: 4px 0; }
+  body.fold-mode .legend-swatch,
+  body.fold-mode .legend-dot { width: 22px; height: 14px; }
+  body.fold-mode .legend-dot { border-radius: 50%; width: 14px; height: 14px; }
+  body.fold-mode #track-mode-select {
+    font-size: 11px !important;
+    padding: 6px 8px !important;
+  }
+  body.fold-mode #map-reset-btn,
+  body.fold-mode #map-zoom-sat-btn {
+    font-size: 11px !important;
+    padding: 7px 9px !important;
+  }
+
+  /* Preview bar */
+  body.fold-mode #preview-bar { padding: 14px 20px !important; gap: 16px !important; }
+  body.fold-mode #preview-time { font-size: 14px !important; min-width: 280px !important; }
+  body.fold-mode #preview-slider { height: 7px; }
 </style>
 </head>
 <body>
@@ -1193,6 +1766,12 @@
       <button class="theme-btn" data-theme-set="light" title="Daylight theme">☀</button>
       <button class="theme-btn" data-theme-set="phosphor" title="Phosphor theme">▦</button>
     </div>
+    <div class="view-mode-switcher">
+      <button class="view-mode-btn" data-view-mode="auto" title="Auto layout (follows viewport)">⊟ Auto</button>
+      <button class="view-mode-btn" data-view-mode="desktop" title="Force desktop layout">⊞ Desk</button>
+      <button class="view-mode-btn" data-view-mode="fold" title="Fold-optimized layout">⊟⊟ Fold</button>
+    </div>
+    <button class="view-mode-btn fold-only-btn" id="reset-layout-btn" title="Reset fold layout sizes to default" onclick="window.resetFoldLayout && window.resetFoldLayout()">⤢ Reset Layout</button>
   </div>
 </header>
 
@@ -1205,6 +1784,11 @@
 </nav>
 
 <div class="container">
+
+  <!-- Fold-mode drag resize handles (only visible in fold mode) -->
+  <div class="fold-resizer fold-resizer-col" id="fold-resizer-col" title="Drag to resize map / controls width"></div>
+  <div class="fold-resizer fold-resizer-row1" id="fold-resizer-row1" title="Drag to resize telemetry / catalog height"></div>
+  <div class="fold-resizer fold-resizer-row2" id="fold-resizer-row2" title="Drag to resize catalog / passes height"></div>
 
   <!-- LEFT COLUMN: Input -->
   <aside class="col" data-pane="catalog">
@@ -1341,6 +1925,10 @@
   <!-- CENTER COLUMN: Map -->
   <main class="col center" data-pane="map">
     <div class="companion-badge">◉ Ground Track</div>
+    <div id="view-toggle">
+      <button class="view-toggle-btn active" data-view="2d" title="2D Mercator map">▦ 2D</button>
+      <button class="view-toggle-btn" data-view="3d" title="3D globe with orbital paths">◍ 3D</button>
+    </div>
     <div id="map" style="position:relative;">
       <div class="map-legend" id="map-legend">
         <div class="legend-title" id="legend-toggle" title="Click to collapse/expand">
@@ -1395,6 +1983,44 @@
           <span id="night-toggle-label">Night side ◐</span>
         </div>
         </div><!-- /legend-body -->
+      </div>
+    </div>
+    <div id="globe-wrap">
+      <canvas id="globe-canvas"></canvas>
+      <div class="globe-hud" id="globe-hud">
+        <div class="legend-title" id="globe-hud-toggle" title="Click to collapse/expand">
+          <span id="globe-hud-icon">▾</span> Orbital View
+        </div>
+        <div class="globe-hud-body" id="globe-hud-body">
+        <div class="legend-row">
+          <div class="legend-swatch" style="background:linear-gradient(90deg,#ffb627,#fff);box-shadow:0 0 8px #ffb627;"></div>
+          <span>Orbit path</span>
+        </div>
+        <div class="legend-row">
+          <div class="legend-dot" style="background:#fff;box-shadow:0 0 8px #ffb627;"></div>
+          <span>Satellite</span>
+        </div>
+        <div class="legend-row">
+          <div class="legend-dot" style="background:#00e5ff;box-shadow:0 0 6px #00e5ff;"></div>
+          <span>Observer</span>
+        </div>
+        <div class="legend-row">
+          <div class="legend-swatch" style="background:linear-gradient(90deg,#0a1830,#ffe9b0);"></div>
+          <span>Day / Night</span>
+        </div>
+        <div class="legend-row" id="globe-foot-toggle" style="cursor:pointer;" title="Toggle observer visibility footprints">
+          <div class="legend-dot" style="background:transparent;border:1.5px dashed #00e5ff;"></div>
+          <span id="globe-foot-label">Obs footprints ◯</span>
+        </div>
+        <div class="globe-hud-btns">
+          <button id="globe-tosat-btn" class="globe-mini-btn" title="Switch viewpoint to the selected satellite and follow it">◎ To Sat</button>
+        </div>
+        <div class="globe-hud-btns">
+          <button id="globe-reset-btn" class="globe-mini-btn" title="Reset camera">⊕ Reset</button>
+          <button id="globe-rotate-btn" class="globe-mini-btn active" title="Toggle auto-rotate">⟳ Auto</button>
+        </div>
+        <div class="globe-hint">Drag · rotate &nbsp; Scroll · zoom</div>
+        </div><!-- /globe-hud-body -->
       </div>
     </div>
     <div class="footer-bar">
@@ -1498,7 +2124,7 @@
 
   <!-- BOTTOM: Pass predictions (inside container so mobile flex-order works) -->
   <div data-pane="passes" class="passes-wrap">
-    <div class="panel" style="margin: 0; border: none;">
+    <div class="panel" id="passes-panel" style="margin: 0; border: none;">
       <div class="panel-header" style="flex-wrap:wrap; gap: 8px;">
         <span class="panel-title" id="pass-panel-title">Pass Predictions · Next 72 Hours</span>
         <div class="pass-header-controls">
@@ -1759,6 +2385,63 @@
     });
     document.querySelector('[data-pane="map"]').classList.add('active-pane');
     document.body.setAttribute('data-tab-mode', 'map');
+
+    // ============= VIEW MODE (auto / desktop / fold) =============
+    const VIEW_MODE_KEY = 'orbital_view_mode_v1';
+    // 'auto'    = follow viewport (default)
+    // 'desktop' = force desktop layout on small screens
+    // 'fold'    = same desktop layout, but with UI sizes tuned for foldable phones
+    let viewMode = 'auto';
+    try {
+      const saved = localStorage.getItem(VIEW_MODE_KEY);
+      if (saved === 'desktop' || saved === 'fold' || saved === 'auto') viewMode = saved;
+    } catch (_) {}
+
+    function applyViewMode() {
+      // Only suppress forced desktop/fold layout on truly narrow screens (regular phones,
+      // folded outer screen of foldables ~ 380px). On wider viewports including foldable
+      // unfolded screens (~700-900px CSS px due to high DPR), respect the user's choice.
+      const isVeryNarrow = window.innerWidth < 500;
+      const forceDesk = (viewMode === 'desktop' || viewMode === 'fold') && !isVeryNarrow;
+      const isFold = viewMode === 'fold' && !isVeryNarrow;
+      document.body.classList.toggle('force-desktop', forceDesk);
+      document.body.classList.toggle('fold-mode', isFold);
+      // Update active state on buttons
+      document.querySelectorAll('.view-mode-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.viewMode === viewMode);
+      });
+      if (window._map) {
+        [50, 200, 400].forEach(d => setTimeout(() => {
+          try { window._map.invalidateSize({ animate: false }); } catch (_) {}
+        }, d));
+      }
+      if (window._positionResizeHandles) {
+        [0, 250, 450].forEach(d => setTimeout(window._positionResizeHandles, d));
+      }
+    }
+
+    function setViewMode(mode) {
+      if (mode !== 'auto' && mode !== 'desktop' && mode !== 'fold') return;
+      viewMode = mode;
+      try { localStorage.setItem(VIEW_MODE_KEY, viewMode); } catch (_) {}
+      applyViewMode();
+    }
+    window.setViewMode = setViewMode;
+    window.reapplyViewMode = applyViewMode;
+    window.isMobileLayout = () => {
+      // User's choice wins unless screen is extremely narrow
+      const isVeryNarrow = window.innerWidth < 500;
+      if (viewMode === 'desktop' || viewMode === 'fold') {
+        return isVeryNarrow;  // forced mode only blocked on tiny screens
+      }
+      // auto mode: follow viewport
+      return window.innerWidth <= 900;
+    };
+
+    applyViewMode();
+    document.querySelectorAll('.view-mode-btn').forEach(b => {
+      b.addEventListener('click', () => setViewMode(b.dataset.viewMode));
+    });
   });
 
   window.showPane = showPane;
@@ -2023,13 +2706,20 @@ window.addEventListener('resize', () => {
   if (window._map) {
     try { window._map.invalidateSize({ animate: false }); } catch (_) {}
   }
+  // Re-apply view mode — viewport may have crossed the 900px threshold
+  // (e.g. fold phone opened/closed, browser window resized).
+  if (typeof window.reapplyViewMode === 'function') {
+    window.reapplyViewMode();
+  }
 });
 window.addEventListener('orientationchange', () => {
-  // Orientation change triggers layout reflow; give it time to settle
   [100, 300, 600].forEach(delay => {
     setTimeout(() => {
       if (window._map) {
         try { window._map.invalidateSize({ animate: false }); } catch (_) {}
+      }
+      if (typeof window.reapplyViewMode === 'function') {
+        window.reapplyViewMode();
       }
     }, delay);
   });
@@ -2317,14 +3007,22 @@ document.getElementById('night-toggle').addEventListener('click', () => {
   refreshNightLayer(state.preview ? state.preview.time : new Date());
 });
 
-// Observer footprint toggle
-document.getElementById('footprint-toggle').addEventListener('click', () => {
+// Observer footprint toggle (shared between the 2D map legend and the 3D globe HUD)
+function applyFootprintUI() {
+  const on = state.showFootprints !== false;
+  const txt = on ? 'Obs footprints ◯' : 'Obs footprints (off)';
+  const l2d = document.getElementById('footprint-toggle-label');
+  if (l2d) { l2d.textContent = txt; l2d.style.opacity = on ? '1' : '0.5'; }
+  const l3d = document.getElementById('globe-foot-label');
+  if (l3d) { l3d.textContent = txt; l3d.style.opacity = on ? '1' : '0.5'; }
+}
+window.toggleObsFootprints = function() {
   state.showFootprints = state.showFootprints === false ? true : false;
-  const label = document.getElementById('footprint-toggle-label');
-  label.textContent = state.showFootprints ? 'Obs footprints ◯' : 'Obs footprints (off)';
-  label.style.opacity = state.showFootprints ? '1' : '0.5';
-  refreshObserverMarkers();
-});
+  applyFootprintUI();
+  refreshObserverMarkers();                                  // 2D map
+  if (window.__globe && window.__globe.isVisible()) window.__globe.tick();  // 3D globe
+};
+document.getElementById('footprint-toggle').addEventListener('click', window.toggleObsFootprints);
 
 // Legend collapse/expand toggle
 (function setupLegendToggle() {
@@ -2357,6 +3055,409 @@ document.getElementById('footprint-toggle').addEventListener('click', () => {
     applyState();
     try { localStorage.setItem(KEY, String(collapsed)); } catch (_) {}
   });
+})();
+
+// ============= COLLAPSIBLE PANELS =============
+// Auto-enable collapse toggle on every .panel that has a .panel-header (except editor panels
+// which already have their own ✕ close button).
+(function setupPanelCollapse() {
+  const COLLAPSE_KEY = 'orbital_panel_collapsed_v1';
+  let collapsedSet = new Set();
+  try {
+    const raw = localStorage.getItem(COLLAPSE_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) collapsedSet = new Set(arr);
+    }
+  } catch (_) {}
+
+  function saveState() {
+    try {
+      localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...collapsedSet]));
+    } catch (_) {}
+  }
+
+  // Identify panels by their .panel-title text content to create stable keys
+  function panelKey(panel) {
+    // Prefer explicit ID if available
+    if (panel.id) return panel.id;
+    const title = panel.querySelector('.panel-title');
+    if (title && title.textContent) {
+      return 'panel:' + title.textContent.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    }
+    return null;
+  }
+
+  // Find collapsible panels:
+  // - All .panel elements with a header
+  // - But skip editor panels (sat-editor, observer-editor) — they have ✕ close
+  // - Skip the panel inside passes-wrap (it has its own header with mode toggles)
+  function setupOnePanel(panel) {
+    const header = panel.querySelector('.panel-header');
+    if (!header) return;
+    // Skip editor panels (identified by ✕ close button)
+    if (header.querySelector('[id$="-editor-close"]')) return;
+    // Skip browse panel (already has its own toggle)
+    if (header.querySelector('#browse-toggle')) return;
+    // Avoid double-setup
+    if (panel.dataset.collapsibleSetup) return;
+    panel.dataset.collapsibleSetup = '1';
+
+    const key = panelKey(panel);
+    if (!key) return;
+
+    // Collapsible if there is any content beyond the header. We collapse ALL non-header
+    // children (handles .panel-body, telemetry .data-grid, sky view .skyview-wrap, etc.)
+    const hasBody = Array.from(panel.children).some(c => !c.classList.contains('panel-header'));
+    if (!hasBody) return;
+
+    // Add a small collapse chevron to the header (right-aligned)
+    const chevron = document.createElement('span');
+    chevron.className = 'panel-collapse-chevron';
+    chevron.textContent = '▾';
+    chevron.title = 'Collapse panel';
+    chevron.style.marginLeft = '6px';
+    header.appendChild(chevron);
+
+    // Header acts as toggle target
+    header.style.cursor = 'pointer';
+    header.classList.add('panel-header-collapsible');
+
+    function applyState() {
+      const isCollapsed = collapsedSet.has(key);
+      panel.classList.toggle('panel-collapsed', isCollapsed);
+      chevron.textContent = isCollapsed ? '▸' : '▾';
+    }
+    applyState();
+
+    header.addEventListener('click', (e) => {
+      // Don't toggle if user clicked an interactive control inside the header
+      if (e.target.closest('button, input, select, .pass-mode-btn, [data-action]')) return;
+      if (collapsedSet.has(key)) collapsedSet.delete(key);
+      else collapsedSet.add(key);
+      saveState();
+      applyState();
+      // Reposition desktop resize handles (row heights may have changed, e.g. passes collapse)
+      if (window._positionResizeHandles) setTimeout(window._positionResizeHandles, 0);
+      // Tell Leaflet about possible size change
+      if (window._map) {
+        setTimeout(() => { try { window._map.invalidateSize({ animate: false }); } catch (_) {} }, 250);
+      }
+    });
+  }
+
+  // Apply to all existing panels now
+  document.querySelectorAll('.panel').forEach(setupOnePanel);
+
+  // Re-scan periodically in case new panels are added dynamically (e.g. browse-panel show)
+  // Use MutationObserver for efficiency
+  const obs = new MutationObserver(() => {
+    document.querySelectorAll('.panel').forEach(setupOnePanel);
+  });
+  obs.observe(document.body, { childList: true, subtree: true });
+})();
+
+// ============= FOLD LAYOUT DRAG-RESIZE =============
+(function setupFoldResize() {
+  const LAYOUT_KEY = 'orbital_fold_layout_v1';
+  const container = document.querySelector('.container');
+  if (!container) return;
+
+  // Default fr values
+  const defaults = {
+    mapFr: 1.0, ctrlFr: 1.0,    // columns
+    dataFr: 2.0, catalogFr: 2.0, passesFr: 3.0,  // rows
+  };
+  let layout = { ...defaults };
+  try {
+    const raw = localStorage.getItem(LAYOUT_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      layout = { ...defaults, ...parsed };
+    }
+  } catch (_) {}
+
+  function applyLayout() {
+    container.style.setProperty('--fold-map-fr', layout.mapFr + 'fr');
+    container.style.setProperty('--fold-ctrl-fr', layout.ctrlFr + 'fr');
+    container.style.setProperty('--fold-data-fr', layout.dataFr + 'fr');
+    container.style.setProperty('--fold-catalog-fr', layout.catalogFr + 'fr');
+    container.style.setProperty('--fold-passes-fr', layout.passesFr + 'fr');
+  }
+  function saveLayout() {
+    try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch (_) {}
+  }
+  applyLayout();
+  window.resetFoldLayout = () => {
+    layout = { ...defaults };
+    applyLayout();
+    saveLayout();
+    if (window._map) setTimeout(() => { try { window._map.invalidateSize({ animate: false }); } catch (_) {} }, 100);
+  };
+
+  // --- Column resizer (map | controls) ---
+  const colResizer = document.getElementById('fold-resizer-col');
+  if (colResizer) {
+    let dragging = false;
+    let startX = 0, startMapFr = 0, startCtrlFr = 0, containerW = 0;
+
+    const onMove = (clientX) => {
+      if (!dragging) return;
+      const dx = clientX - startX;
+      // Total fr units for columns
+      const totalFr = startMapFr + startCtrlFr;
+      // Convert dx to fr delta based on container width
+      const frPerPx = totalFr / containerW;
+      let newMapFr = startMapFr + dx * frPerPx;
+      let newCtrlFr = startCtrlFr - dx * frPerPx;
+      // Clamp to reasonable bounds (each side at least 20% of total)
+      const minFr = totalFr * 0.2;
+      if (newMapFr < minFr) { newMapFr = minFr; newCtrlFr = totalFr - minFr; }
+      if (newCtrlFr < minFr) { newCtrlFr = minFr; newMapFr = totalFr - minFr; }
+      layout.mapFr = +newMapFr.toFixed(3);
+      layout.ctrlFr = +newCtrlFr.toFixed(3);
+      applyLayout();
+    };
+
+    const startDrag = (clientX) => {
+      dragging = true;
+      startX = clientX;
+      startMapFr = layout.mapFr;
+      startCtrlFr = layout.ctrlFr;
+      containerW = container.getBoundingClientRect().width;
+      colResizer.classList.add('dragging');
+      document.body.style.userSelect = 'none';
+    };
+    const endDrag = () => {
+      if (!dragging) return;
+      dragging = false;
+      colResizer.classList.remove('dragging');
+      document.body.style.userSelect = '';
+      saveLayout();
+      if (window._map) setTimeout(() => { try { window._map.invalidateSize({ animate: false }); } catch (_) {} }, 100);
+    };
+
+    colResizer.addEventListener('mousedown', e => { e.preventDefault(); startDrag(e.clientX); });
+    window.addEventListener('mousemove', e => onMove(e.clientX));
+    window.addEventListener('mouseup', endDrag);
+    colResizer.addEventListener('touchstart', e => { startDrag(e.touches[0].clientX); }, { passive: true });
+    window.addEventListener('touchmove', e => { if (dragging) onMove(e.touches[0].clientX); }, { passive: true });
+    window.addEventListener('touchend', endDrag);
+  }
+
+  // --- Row resizers (data|catalog and catalog|passes) ---
+  function setupRowResizer(id, frAbove, frBelow) {
+    const resizer = document.getElementById(id);
+    if (!resizer) return;
+    let dragging = false;
+    let startY = 0, startAbove = 0, startBelow = 0, containerH = 0;
+
+    const onMove = (clientY) => {
+      if (!dragging) return;
+      const dy = clientY - startY;
+      const totalFr = startAbove + startBelow;
+      const frPerPx = totalFr / containerH;
+      let newAbove = startAbove + dy * frPerPx;
+      let newBelow = startBelow - dy * frPerPx;
+      const minFr = totalFr * 0.15;
+      if (newAbove < minFr) { newAbove = minFr; newBelow = totalFr - minFr; }
+      if (newBelow < minFr) { newBelow = minFr; newAbove = totalFr - minFr; }
+      layout[frAbove] = +newAbove.toFixed(3);
+      layout[frBelow] = +newBelow.toFixed(3);
+      applyLayout();
+    };
+
+    const startDrag = (clientY) => {
+      dragging = true;
+      startY = clientY;
+      startAbove = layout[frAbove];
+      startBelow = layout[frBelow];
+      // Container height minus padding — use the grid area height (approx via container)
+      containerH = container.getBoundingClientRect().height;
+      resizer.classList.add('dragging');
+      document.body.style.userSelect = 'none';
+    };
+    const endDrag = () => {
+      if (!dragging) return;
+      dragging = false;
+      resizer.classList.remove('dragging');
+      document.body.style.userSelect = '';
+      saveLayout();
+    };
+
+    resizer.addEventListener('mousedown', e => { e.preventDefault(); startDrag(e.clientY); });
+    window.addEventListener('mousemove', e => onMove(e.clientY));
+    window.addEventListener('mouseup', endDrag);
+    resizer.addEventListener('touchstart', e => { startDrag(e.touches[0].clientY); }, { passive: true });
+    window.addEventListener('touchmove', e => { if (dragging) onMove(e.touches[0].clientY); }, { passive: true });
+    window.addEventListener('touchend', endDrag);
+  }
+  // row1 between data and catalog; row2 between catalog and passes
+  setupRowResizer('fold-resizer-row1', 'dataFr', 'catalogFr');
+  setupRowResizer('fold-resizer-row2', 'catalogFr', 'passesFr');
+})();
+
+// ============= DESKTOP DRAG-RESIZE (column widths + passes height) =============
+// In the standard 3-column desktop grid, let the user drag the gutters to resize the
+// left/right columns and the bottom passes panel. Persisted to localStorage.
+// Hidden on mobile (pane mode) and in fold-mode (which has its own resizers).
+(function setupDesktopResize() {
+  const KEY = 'orbital_desktop_layout_v1';
+  const container = document.querySelector('.container');
+  const passesWrap = document.querySelector('.passes-wrap');
+  const passBody = document.getElementById('pass-panel-body');
+  if (!container) return;
+
+  const catalog = container.querySelector('[data-pane="catalog"]');
+  const center = container.querySelector('[data-pane="map"]');
+  const dataCol = container.querySelector('[data-pane="data"]');
+  if (!catalog || !center || !dataCol) return;
+
+  let layout = {};
+  try { const raw = localStorage.getItem(KEY); if (raw) layout = JSON.parse(raw) || {}; } catch (_) {}
+
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(layout)); } catch (_) {} }
+
+  function applyLayout() {
+    if (layout.colLeft)  container.style.setProperty('--col-left',  layout.colLeft + 'px');
+    else container.style.removeProperty('--col-left');
+    if (layout.colRight) container.style.setProperty('--col-right', layout.colRight + 'px');
+    else container.style.removeProperty('--col-right');
+    if (layout.passesH) container.style.setProperty('--passes-h', layout.passesH + 'px');
+    else container.style.removeProperty('--passes-h');
+    // Drop any value saved by the old (max-height) implementation
+    if (passBody) passBody.style.maxHeight = '';
+  }
+
+  // Create handles
+  const hLeft  = document.createElement('div'); hLeft.className  = 'col-resizer';
+  hLeft.id = 'col-resizer-left';   hLeft.title = 'Drag to resize left column · double-click to reset';
+  const hRight = document.createElement('div'); hRight.className = 'col-resizer';
+  hRight.id = 'col-resizer-right'; hRight.title = 'Drag to resize right column · double-click to reset';
+  container.appendChild(hLeft);
+  container.appendChild(hRight);
+
+  let hPass = null;
+  if (passesWrap && passBody) {
+    hPass = document.createElement('div'); hPass.className = 'pass-resizer';
+    hPass.id = 'pass-resizer'; hPass.title = 'Drag to resize pass list height · double-click to reset';
+    passesWrap.appendChild(hPass);
+  }
+
+  function isThreeCol() {
+    const b = document.body;
+    if (b.classList.contains('fold-mode')) return false;
+    return window.innerWidth > 900 || b.classList.contains('force-desktop');
+  }
+
+  function position() {
+    if (!isThreeCol()) {
+      hLeft.style.display = hRight.style.display = 'none';
+      if (hPass) hPass.style.display = 'none';
+      // Split-pane sizing only applies to the desktop 3-column grid
+      container.classList.remove('passes-resized');
+      return;
+    }
+    const cr = container.getBoundingClientRect();
+    const ca = catalog.getBoundingClientRect();
+    const ce = center.getBoundingClientRect();
+    const da = dataCol.getBoundingClientRect();
+    const top = ce.top - cr.top;
+    const h = ce.height;
+    hLeft.style.display = hRight.style.display = 'block';
+    hLeft.style.top = top + 'px';   hLeft.style.height = h + 'px';
+    hRight.style.top = top + 'px';  hRight.style.height = h + 'px';
+    hLeft.style.left  = ((ca.right + ce.left) / 2 - cr.left) + 'px';
+    hRight.style.left = ((ce.right + da.left) / 2 - cr.left) + 'px';
+    if (hPass) hPass.style.display = 'block';
+    container.classList.toggle('passes-resized', !!layout.passesH);
+  }
+  window._positionResizeHandles = position;
+
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+  function beginDrag(handle, onMove) {
+    return (ev) => {
+      ev.preventDefault();
+      handle.classList.add('dragging');
+      document.body.style.userSelect = 'none';
+      const startBottom = passBody ? passBody.getBoundingClientRect().bottom : 0;
+      const move = (e) => {
+        const t = e.touches && e.touches[0];
+        onMove(t ? t.clientX : e.clientX, t ? t.clientY : e.clientY, startBottom);
+        position();
+      };
+      const up = () => {
+        handle.classList.remove('dragging');
+        document.body.style.userSelect = '';
+        window.removeEventListener('mousemove', move);
+        window.removeEventListener('mouseup', up);
+        window.removeEventListener('touchmove', move);
+        window.removeEventListener('touchend', up);
+        save();
+        position();
+        if (window._map) setTimeout(() => { try { window._map.invalidateSize({ animate: false }); } catch (_) {} }, 150);
+      };
+      window.addEventListener('mousemove', move);
+      window.addEventListener('mouseup', up);
+      window.addEventListener('touchmove', move, { passive: false });
+      window.addEventListener('touchend', up);
+    };
+  }
+
+  const maxCol = () => Math.min(620, container.getBoundingClientRect().width * 0.42);
+
+  const dragLeft = beginDrag(hLeft, (x) => {
+    const w = clamp(x - catalog.getBoundingClientRect().left, 220, maxCol());
+    layout.colLeft = Math.round(w);
+    container.style.setProperty('--col-left', layout.colLeft + 'px');
+  });
+  const dragRight = beginDrag(hRight, (x) => {
+    const w = clamp(dataCol.getBoundingClientRect().right - x, 220, maxCol());
+    layout.colRight = Math.round(w);
+    container.style.setProperty('--col-right', layout.colRight + 'px');
+  });
+  hLeft.addEventListener('mousedown', dragLeft);
+  hLeft.addEventListener('touchstart', dragLeft, { passive: false });
+  hRight.addEventListener('mousedown', dragRight);
+  hRight.addEventListener('touchstart', dragRight, { passive: false });
+
+  hLeft.addEventListener('dblclick', () => {
+    delete layout.colLeft; container.style.removeProperty('--col-left'); save(); position();
+  });
+  hRight.addEventListener('dblclick', () => {
+    delete layout.colRight; container.style.removeProperty('--col-right'); save(); position();
+  });
+
+  if (hPass) {
+    const dragPass = beginDrag(hPass, (x, y) => {
+      const cr = container.getBoundingClientRect();
+      // Height of the passes row = distance from pointer to the bottom of the grid.
+      // Dragging up grows the passes panel and shrinks the map area (true split).
+      const h = clamp(cr.bottom - y, 90, cr.height - 200);
+      layout.passesH = Math.round(h);
+      container.classList.add('passes-resized');
+      container.style.setProperty('--passes-h', layout.passesH + 'px');
+    });
+    hPass.addEventListener('mousedown', dragPass);
+    hPass.addEventListener('touchstart', dragPass, { passive: false });
+    hPass.addEventListener('dblclick', () => {
+      delete layout.passesH;
+      container.classList.remove('passes-resized');
+      container.style.removeProperty('--passes-h');
+      save(); position();
+      if (window._map) setTimeout(() => { try { window._map.invalidateSize({ animate: false }); } catch (_) {} }, 150);
+    });
+  }
+
+  applyLayout();
+
+  // Keep handles aligned as layout changes
+  if (window.ResizeObserver) {
+    try { new ResizeObserver(() => position()).observe(center); } catch (_) {}
+  }
+  window.addEventListener('resize', position);
+  [0, 200, 500, 1000].forEach(d => setTimeout(position, d));
 })();
 
 // Track length mode selector
@@ -2417,6 +3518,7 @@ document.getElementById('map-zoom-sat-btn').addEventListener('click', () => {
 
 // Expose refresh helper for theme switcher to call after color change
 window._refreshVisuals = function() {
+  if (window.__globe) window.__globe.onThemeChange();
   refreshObserverMarkers();
   refreshNightLayer(state.preview ? state.preview.time : new Date());
   if (state.target) {
@@ -3381,7 +4483,7 @@ function enterSatSatPreview(idx) {
   renderPassTable([]);
   renderSatSatPreviewAt(slider.value);
 
-  if (window.innerWidth <= 900 && window.showPane) {
+  if ((window.isMobileLayout ? window.isMobileLayout() : window.innerWidth <= 900) && window.showPane) {
     const currentMode = document.body.getAttribute('data-tab-mode');
     if (currentMode === 'catalog') window.showPane('passes');
   }
@@ -3635,7 +4737,7 @@ function setTarget(name, l1, l2, noradId, opts = {}) {
     renderMySatList();
 
     // On mobile, switch to live data view (unless caller suppresses)
-    if (!opts.skipMobileSwitch && window.innerWidth <= 900 && window.showPane) {
+    if (!opts.skipMobileSwitch && (window.isMobileLayout ? window.isMobileLayout() : window.innerWidth <= 900) && window.showPane) {
       window.showPane('data');
     }
   } catch (e) {
@@ -3979,6 +5081,7 @@ function renderPassTable(passes) {
 
 // ============= LIVE UPDATE / PREVIEW =============
 function liveTick() {
+  if (window.__globe && window.__globe.isVisible()) window.__globe.tick();
   if (!state.target) return;
   // In preview mode, the slider drives rendering; live tick only updates pass-table highlights
   if (state.preview) {
@@ -4357,7 +5460,7 @@ function enterPreview(passIndex) {
   renderPreviewAt(slider.value);
 
   // On mobile, ensure the user is on the Passes tab so they see both list + map
-  if (window.innerWidth <= 900 && window.showPane) {
+  if ((window.isMobileLayout ? window.isMobileLayout() : window.innerWidth <= 900) && window.showPane) {
     const currentMode = document.body.getAttribute('data-tab-mode');
     if (currentMode === 'catalog') {
       window.showPane('passes');
@@ -4440,7 +5543,7 @@ function enterMultiPreview(idx) {
   renderMultiPreviewAt(slider.value);
 
   // On mobile, switch to passes tab
-  if (window.innerWidth <= 900 && window.showPane) {
+  if ((window.isMobileLayout ? window.isMobileLayout() : window.innerWidth <= 900) && window.showPane) {
     const currentMode = document.body.getAttribute('data-tab-mode');
     if (currentMode === 'catalog') window.showPane('passes');
   }
@@ -4658,7 +5761,7 @@ document.querySelectorAll('.pass-mode-btn[data-pass-mode]').forEach(btn => {
     }
     const body = document.getElementById('pass-panel-body');
     if (body) {
-      const isMobile = window.innerWidth <= 900;
+      const isMobile = window.isMobileLayout ? window.isMobileLayout() : (window.innerWidth <= 900);
       if (isMobile) {
         body.style.maxHeight = '';
       } else {
@@ -6214,6 +7317,619 @@ function showError(msg) {
   if (state.mySats.length) {
     setTimeout(() => trackMySat(0), 50);
   }
+})();
+
+// ============= 3D GLOBE / ORBITAL VIEW =============
+// Renders Earth as a textured sphere with satellite orbital paths lifted to their
+// true altitude, observer markers, and sun-direction lighting (day/night terminator).
+// Reuses the exact same satellite.js propagation as the 2D ground track so the
+// sub-satellite point matches the Mercator view.
+const Globe = (function () {
+  const EARTH_KM = 6371;
+  const R = 1;                  // Earth radius in scene units
+  const SCALE = R / EARTH_KM;   // km -> scene units
+
+  let three = false, loadingThree = null, ready = false, visible = false;
+  let renderer, scene, camera, earth, earthMat, atmosphere, graticule, stars, sunLight, ambient;
+  let dynamic = null;           // group of sats/observers/paths, rebuilt each refresh
+  let raf = null;
+  let wrap, canvas;
+  let haloTex = null;
+
+  // Spherical camera controls
+  let camTheta = 2.3, camPhi = 1.15, camRadius = 3.2;
+  let autoRotate = true, lastInteract = 0;
+  let dragging = false, lastX = 0, lastY = 0, pinchDist = 0;
+  let anim = null;                       // {theta, phi, radius} tween target for smooth reset
+  const AUTO_SPEED = 0.003;              // rad/frame (~10°/s) — clearly visible
+  const IDLE_MS = 2000;                  // resume auto-rotate this long after an interaction
+  let followSat = false;                 // keep the selected satellite centered in view
+  const FOLLOW_EASE = 0.12;              // how quickly the camera tracks the moving satellite
+  let onControlChange = null;            // notifier so the UI can sync button states
+  function notifyControls() { if (typeof onControlChange === 'function') onControlChange(); }
+
+  function currentWhen() { return state.preview ? state.preview.time : new Date(); }
+  function isVisible() { return visible; }
+
+  // lat/lon (deg) + altitude (km) -> scene Vector3. Standard equirectangular-aligned mapping.
+  function latLonAlt(lat, lon, altKm) {
+    const r = R + altKm * SCALE;
+    const phi = (90 - lat) * Math.PI / 180;
+    const theta = (lon + 180) * Math.PI / 180;
+    return new THREE.Vector3(
+      -r * Math.sin(phi) * Math.cos(theta),
+       r * Math.cos(phi),
+       r * Math.sin(phi) * Math.sin(theta)
+    );
+  }
+
+  // Points of a small circle on the sphere centered on `centerDir` (unit) at angular
+  // radius `angRad`, at scene radius `rScene`. Used for observer visibility footprints.
+  function ringPoints(centerDir, angRad, rScene, segments) {
+    const c = centerDir.clone().normalize();
+    const up = Math.abs(c.y) < 0.99 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+    const u = new THREE.Vector3().crossVectors(up, c).normalize();
+    const v = new THREE.Vector3().crossVectors(c, u).normalize();
+    const cosA = Math.cos(angRad), sinA = Math.sin(angRad);
+    const pts = [];
+    for (let i = 0; i <= segments; i++) {
+      const t = (i / segments) * Math.PI * 2;
+      pts.push(new THREE.Vector3()
+        .addScaledVector(c, cosA)
+        .addScaledVector(u, sinA * Math.cos(t))
+        .addScaledVector(v, sinA * Math.sin(t))
+        .multiplyScalar(rScene));
+    }
+    return pts;
+  }
+
+  function loadThree() {
+    if (three) return Promise.resolve();
+    if (loadingThree) return loadingThree;
+    loadingThree = loadScript([
+      'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
+      'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js',
+      'https://unpkg.com/three@0.128.0/build/three.min.js',
+      'https://fastly.jsdelivr.net/npm/three@0.128.0/build/three.min.js',
+      'https://gcore.jsdelivr.net/npm/three@0.128.0/build/three.min.js'
+    ], 'Three.js').then(() => {
+      if (typeof THREE === 'undefined') throw new Error('THREE not available after load');
+      three = true;
+    });
+    return loadingThree;
+  }
+
+  function haloTexture() {
+    if (haloTex) return haloTex;
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.25, 'rgba(255,255,255,0.65)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 64);
+    haloTex = new THREE.CanvasTexture(c);
+    return haloTex;
+  }
+
+  function makeStars() {
+    const n = 2200;
+    const pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const u = Math.random(), v = Math.random();
+      const th = 2 * Math.PI * u, ph = Math.acos(2 * v - 1);
+      const rr = 60 + Math.random() * 40;
+      pos[i*3]   = rr * Math.sin(ph) * Math.cos(th);
+      pos[i*3+1] = rr * Math.cos(ph);
+      pos[i*3+2] = rr * Math.sin(ph) * Math.sin(th);
+      const b = 0.55 + Math.random() * 0.45;
+      col[i*3] = b; col[i*3+1] = b; col[i*3+2] = Math.min(1, b * (0.9 + Math.random() * 0.25));
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const m = new THREE.PointsMaterial({ size: 0.22, sizeAttenuation: true, vertexColors: true, transparent: true, opacity: 0.9 });
+    return new THREE.Points(g, m);
+  }
+
+  function makeGraticule(colorHex) {
+    const pts = [];
+    const STEP = 4;
+    for (let lat = -60; lat <= 60; lat += 30)
+      for (let lon = -180; lon < 180; lon += STEP) {
+        pts.push(latLonAlt(lat, lon, 12)); pts.push(latLonAlt(lat, lon + STEP, 12));
+      }
+    for (let lon = -180; lon < 180; lon += 30)
+      for (let lat = -86; lat < 86; lat += STEP) {
+        pts.push(latLonAlt(lat, lon, 12)); pts.push(latLonAlt(lat + STEP, lon, 12));
+      }
+    const g = new THREE.BufferGeometry().setFromPoints(pts);
+    const m = new THREE.LineBasicMaterial({ color: new THREE.Color(colorHex || '#00e5ff'), transparent: true, opacity: 0.16 });
+    return new THREE.LineSegments(g, m);
+  }
+
+  function buildEarth() {
+    const geo = new THREE.SphereGeometry(R, 64, 48);
+    earthMat = new THREE.MeshPhongMaterial({
+      color: 0x2a3a4a, emissive: 0x070d14, emissiveIntensity: 1,
+      shininess: 10, specular: 0x101820
+    });
+    earth = new THREE.Mesh(geo, earthMat);
+    scene.add(earth);
+
+    // Texture (best-effort; falls back to a lit wireframe-style sphere if blocked)
+    const loader = new THREE.TextureLoader();
+    try { loader.setCrossOrigin('anonymous'); } catch (_) {}
+    const urls = [
+      'https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg',
+      'https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-blue-marble.jpg',
+      'https://fastly.jsdelivr.net/npm/three-globe/example/img/earth-blue-marble.jpg'
+    ];
+    let i = 0;
+    const tryTex = () => {
+      if (i >= urls.length) { if (graticule) graticule.material.opacity = 0.34; return; }
+      loader.load(urls[i++], (tex) => {
+        if (THREE.sRGBEncoding !== undefined) tex.encoding = THREE.sRGBEncoding;
+        earthMat.map = tex;
+        earthMat.color.set(0xffffff);
+        earthMat.emissive.set(0x0a0a0a);
+        earthMat.needsUpdate = true;
+      }, undefined, tryTex);
+    };
+    tryTex();
+
+    // Atmosphere rim glow
+    const atmMat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(themeColor('cyan') || '#00e5ff'),
+      transparent: true, opacity: 0.12, side: THREE.BackSide,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    atmosphere = new THREE.Mesh(new THREE.SphereGeometry(R * 1.03, 48, 32), atmMat);
+    scene.add(atmosphere);
+  }
+
+  function clearDynamic() {
+    if (!dynamic) return;
+    dynamic.traverse(o => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) {
+        if (Array.isArray(o.material)) o.material.forEach(m => m.dispose());
+        else o.material.dispose();
+      }
+    });
+    scene.remove(dynamic);
+    dynamic = null;
+  }
+
+  // Gather active sats + current target (mirrors drawGroundTrack)
+  function gatherSats() {
+    const sats = [];
+    for (const s of state.mySats) {
+      if (!s.active || !s.l1 || !s.l2) continue;
+      try {
+        const rec = satellite.twoline2satrec(s.l1, s.l2);
+        if (rec.error) continue;
+        sats.push({ name: s.name, color: s.color || '#ffb627', satrec: rec,
+                    isTarget: state.target && state.target.norad === s.norad });
+      } catch (_) {}
+    }
+    if (state.target && !sats.some(s => s.isTarget)) {
+      sats.push({ name: state.target.name, color: '#ffb627', satrec: state.target.satrec, isTarget: true });
+    }
+    return sats;
+  }
+
+  // Sample an orbit into scene-space points (continuous; no antimeridian splitting needed in 3D)
+  function samplePath(satrec, fromDate, minutes, stepSec) {
+    const pts = [];
+    for (let s = 0; s <= minutes * 60; s += stepSec) {
+      const d = new Date(fromDate.getTime() + s * 1000);
+      const pv = satellite.propagate(satrec, d);
+      if (!pv || !pv.position) continue;
+      const geo = satellite.eciToGeodetic(pv.position, satellite.gstime(d));
+      pts.push(latLonAlt(deg(geo.latitude), deg(geo.longitude), geo.height));
+    }
+    return pts;
+  }
+
+  function build(when) {
+    if (!ready) return;
+    clearDynamic();
+    dynamic = new THREE.Group();
+    scene.add(dynamic);
+
+    // Sun direction for day/night lighting
+    try {
+      const ss = subsolarPoint(when);
+      sunLight.position.copy(latLonAlt(ss.lat, ss.lon, EARTH_KM * 30));
+      // Subsolar surface marker
+      const sm = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: haloTexture(), color: new THREE.Color('#ffe066'),
+        transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false
+      }));
+      sm.scale.setScalar(0.07);
+      sm.position.copy(latLonAlt(ss.lat, ss.lon, 5));
+      dynamic.add(sm);
+    } catch (_) {}
+
+    // Observers
+    for (const o of getActiveObservers()) {
+      const v = latLonAlt(o.lat, o.lon, 8);
+      const col = new THREE.Color(o.color || '#00e5ff');
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(0.011, 12, 12), new THREE.MeshBasicMaterial({ color: col }));
+      dot.position.copy(v); dynamic.add(dot);
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: haloTexture(), color: col, transparent: true, opacity: 0.55,
+        blending: THREE.AdditiveBlending, depthWrite: false
+      }));
+      halo.scale.setScalar(0.055); halo.position.copy(v); dynamic.add(halo);
+    }
+
+    // Satellites + orbital paths
+    const sats = gatherSats();
+    const satAlts = [];   // {color, altKm} for observer-footprint rings
+    for (const sat of sats) {
+      const period = (2 * Math.PI / sat.satrec.no);  // minutes/orbit
+      const mode = state.trackMode || 'orbit1';
+      let fwd;
+      if (mode === 'orbit1') fwd = period;
+      else if (mode === 'orbit2') fwd = period * 2;
+      else if (mode === 'orbit3') fwd = period * 3;
+      else { try { fwd = computeNextPassEndMinutes(sat.satrec, period); } catch (_) { fwd = period; } }
+      const back = Math.min(period * 0.5, 60);
+      const col = new THREE.Color(sat.color);
+      const isPrim = sat.isTarget || sats.length === 1;
+
+      // Forward orbit
+      const fpts = samplePath(sat.satrec, when, fwd, 20);
+      if (fpts.length > 1) {
+        const fg = new THREE.BufferGeometry().setFromPoints(fpts);
+        dynamic.add(new THREE.Line(fg, new THREE.LineBasicMaterial({
+          color: col, transparent: true, opacity: isPrim ? 0.95 : 0.65
+        })));
+        if (isPrim) {
+          try {
+            const curve = new THREE.CatmullRomCurve3(fpts);
+            const tube = new THREE.TubeGeometry(curve, Math.min(fpts.length * 2, 400), 0.006, 8, false);
+            dynamic.add(new THREE.Mesh(tube, new THREE.MeshBasicMaterial({
+              color: col, transparent: true, opacity: 0.20,
+              blending: THREE.AdditiveBlending, depthWrite: false
+            })));
+          } catch (_) {}
+        }
+      }
+
+      // Past orbit (faint, dashed)
+      const ppts = samplePath(sat.satrec, new Date(when.getTime() - back * 60000), back, 20);
+      if (ppts.length > 1) {
+        const pg = new THREE.BufferGeometry().setFromPoints(ppts);
+        const pm = new THREE.LineDashedMaterial({
+          color: col, transparent: true, opacity: 0.3, dashSize: 0.03, gapSize: 0.03
+        });
+        const pl = new THREE.Line(pg, pm); pl.computeLineDistances(); dynamic.add(pl);
+      }
+
+      // Current satellite position
+      const pv = satellite.propagate(sat.satrec, when);
+      if (pv && pv.position) {
+        const geo = satellite.eciToGeodetic(pv.position, satellite.gstime(when));
+        const la = deg(geo.latitude), lo = deg(geo.longitude);
+        satAlts.push({ color: sat.color, altKm: geo.height });
+        const v = latLonAlt(la, lo, geo.height);
+        const sub = latLonAlt(la, lo, 0);
+        // altitude stalk
+        const sg = new THREE.BufferGeometry().setFromPoints([sub, v]);
+        dynamic.add(new THREE.Line(sg, new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.22 })));
+        // body + glow
+        const body = new THREE.Mesh(new THREE.SphereGeometry(isPrim ? 0.017 : 0.012, 14, 14),
+          new THREE.MeshBasicMaterial({ color: 0xffffff }));
+        body.position.copy(v); dynamic.add(body);
+        const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: haloTexture(), color: col, transparent: true, opacity: 0.9,
+          blending: THREE.AdditiveBlending, depthWrite: false
+        }));
+        halo.scale.setScalar(isPrim ? 0.11 : 0.08); halo.position.copy(v); dynamic.add(halo);
+        // sub-satellite dot
+        const sd = new THREE.Mesh(new THREE.SphereGeometry(0.006, 8, 8),
+          new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.7 }));
+        sd.position.copy(sub); dynamic.add(sd);
+      }
+    }
+
+    // Observer visibility footprints — one small-circle per (observer × satellite),
+    // centered on the observer at angular radius acos(R/(R+h)). Matches the 2D map.
+    if (state.showFootprints !== false && satAlts.length) {
+      for (const o of getActiveObservers()) {
+        const obsDir = latLonAlt(o.lat, o.lon, 0).normalize();
+        for (const s of satAlts) {
+          const ratio = EARTH_KM / (EARTH_KM + s.altKm);
+          const ang = Math.acos(Math.max(-1, Math.min(1, ratio)));
+          const pts = ringPoints(obsDir, ang, R * 1.003, 96);
+          const g = new THREE.BufferGeometry().setFromPoints(pts);
+          const m = new THREE.LineDashedMaterial({
+            color: new THREE.Color(s.color), transparent: true, opacity: 0.5,
+            dashSize: 0.045, gapSize: 0.03
+          });
+          const ring = new THREE.Line(g, m); ring.computeLineDistances();
+          dynamic.add(ring);
+        }
+      }
+    }
+  }
+
+  function onResize() {
+    if (!renderer || !wrap) return;
+    const w = wrap.clientWidth, h = wrap.clientHeight;
+    if (!w || !h) return;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+
+  function updateCamera() {
+    const x = camRadius * Math.sin(camPhi) * Math.sin(camTheta);
+    const y = camRadius * Math.cos(camPhi);
+    const z = camRadius * Math.sin(camPhi) * Math.cos(camTheta);
+    camera.position.set(x, y, z);
+    camera.lookAt(0, 0, 0);
+  }
+
+  function loop() {
+    raf = requestAnimationFrame(loop);
+    if (followSat) {
+      const dir = satDirection();
+      if (dir) {
+        const targetPhi = Math.acos(Math.max(-1, Math.min(1, dir.y)));
+        const targetTheta = Math.atan2(dir.x, dir.z);
+        // shortest-path easing so the camera glides with the moving satellite
+        const dTheta = Math.atan2(Math.sin(targetTheta - camTheta), Math.cos(targetTheta - camTheta));
+        camTheta += dTheta * FOLLOW_EASE;
+        camPhi   += (targetPhi - camPhi) * FOLLOW_EASE;
+      }
+    } else if (anim) {
+      camTheta  += (anim.theta  - camTheta)  * 0.18;
+      camPhi    += (anim.phi    - camPhi)    * 0.18;
+      camRadius += (anim.radius - camRadius) * 0.18;
+      if (Math.abs(anim.theta - camTheta) < 0.002 &&
+          Math.abs(anim.phi - camPhi) < 0.002 &&
+          Math.abs(anim.radius - camRadius) < 0.002) {
+        camTheta = anim.theta; camPhi = anim.phi; camRadius = anim.radius;
+        anim = null;
+      }
+    } else if (autoRotate && Date.now() - lastInteract > IDLE_MS) {
+      camTheta += AUTO_SPEED;
+    }
+    updateCamera();
+    renderer.render(scene, camera);
+  }
+
+  function attachControls() {
+    const onDown = (x, y) => { dragging = true; lastX = x; lastY = y; lastInteract = Date.now(); anim = null; setFollow(false); };
+    const onMove = (x, y) => {
+      if (!dragging) return;
+      camTheta -= (x - lastX) * 0.006;
+      camPhi   -= (y - lastY) * 0.006;
+      camPhi = Math.max(0.12, Math.min(Math.PI - 0.12, camPhi));
+      lastX = x; lastY = y; lastInteract = Date.now();
+    };
+    const onUp = () => { dragging = false; };
+
+    canvas.addEventListener('mousedown', e => onDown(e.clientX, e.clientY));
+    window.addEventListener('mousemove', e => onMove(e.clientX, e.clientY));
+    window.addEventListener('mouseup', onUp);
+    canvas.addEventListener('wheel', e => {
+      e.preventDefault();
+      anim = null;
+      camRadius = Math.max(1.45, Math.min(8, camRadius + (e.deltaY > 0 ? 0.28 : -0.28)));
+      lastInteract = Date.now();
+    }, { passive: false });
+
+    canvas.addEventListener('touchstart', e => {
+      anim = null;
+      if (e.touches.length === 1) { onDown(e.touches[0].clientX, e.touches[0].clientY); }
+      else if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        pinchDist = Math.hypot(dx, dy);
+      }
+      lastInteract = Date.now();
+    }, { passive: true });
+    canvas.addEventListener('touchmove', e => {
+      if (e.touches.length === 1) onMove(e.touches[0].clientX, e.touches[0].clientY);
+      else if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const d = Math.hypot(dx, dy);
+        if (pinchDist) camRadius = Math.max(1.45, Math.min(8, camRadius * (pinchDist / d)));
+        pinchDist = d;
+        e.preventDefault();
+      }
+      lastInteract = Date.now();
+    }, { passive: false });
+    canvas.addEventListener('touchend', () => { dragging = false; pinchDist = 0; });
+  }
+
+  function showError(msg) {
+    if (!wrap) return;
+    wrap.querySelectorAll('.globe-error').forEach(n => n.remove());
+    const el = document.createElement('div');
+    el.className = 'globe-error';
+    el.innerHTML = `<div>⚠ 3D VIEW UNAVAILABLE</div><div class="sub">${msg}</div>` +
+      `<div class="sub">Check network/CDN access. The 2D map still works.</div>`;
+    wrap.appendChild(el);
+  }
+
+  async function ensureInit() {
+    if (ready) return;
+    await loadThree();
+    wrap = document.getElementById('globe-wrap');
+    canvas = document.getElementById('globe-canvas');
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    if (THREE.sRGBEncoding !== undefined) renderer.outputEncoding = THREE.sRGBEncoding;
+
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(42, 1, 0.01, 2000);
+
+    stars = makeStars(); scene.add(stars);
+    graticule = makeGraticule(themeColor('cyan')); scene.add(graticule);
+    buildEarth();
+
+    ambient = new THREE.AmbientLight(0x33506e, 0.55); scene.add(ambient);
+    sunLight = new THREE.DirectionalLight(0xfff2dd, 1.3); scene.add(sunLight);
+
+    attachControls();
+    if (window.ResizeObserver) { try { new ResizeObserver(() => onResize()).observe(wrap); } catch (_) {} }
+    ready = true;
+    onResize();
+  }
+
+  async function setVisible(v) {
+    wrap = wrap || document.getElementById('globe-wrap');
+    if (v) {
+      wrap.classList.add('loading');
+      try { await ensureInit(); }
+      catch (e) { wrap.classList.remove('loading'); wrap.classList.add('active');
+                  document.getElementById('map').style.display = 'none';
+                  showError(e.message || String(e)); return; }
+      wrap.classList.remove('loading');
+      visible = true;
+      wrap.classList.add('active');
+      document.getElementById('map').style.display = 'none';
+      onResize();
+      build(currentWhen());
+      if (!raf) loop();
+    } else {
+      visible = false;
+      if (wrap) wrap.classList.remove('active');
+      document.getElementById('map').style.display = '';
+      if (raf) { cancelAnimationFrame(raf); raf = null; }
+      if (window._map) { try { window._map.invalidateSize(); } catch (_) {} }
+    }
+  }
+
+  function tick() { if (visible && ready) build(currentWhen()); }
+
+  function onThemeChange() {
+    if (!ready) return;
+    const cy = themeColor('cyan') || '#00e5ff';
+    if (graticule) graticule.material.color.set(cy);
+    if (atmosphere) atmosphere.material.color.set(cy);
+    if (visible) build(currentWhen());
+  }
+
+  // Unit direction (scene space) of the currently selected satellite's sub-point
+  function satDirection() {
+    if (!state.target || !state.target.satrec) return null;
+    try {
+      const when = currentWhen();
+      const pv = satellite.propagate(state.target.satrec, when);
+      if (!pv || !pv.position) return null;
+      const geo = satellite.eciToGeodetic(pv.position, satellite.gstime(when));
+      const v = latLonAlt(deg(geo.latitude), deg(geo.longitude), 0);
+      v.normalize();
+      return v;
+    } catch (_) { return null; }
+  }
+
+  function setFollow(on) {
+    on = !!on;
+    if (followSat === on) return;
+    followSat = on;
+    notifyControls();
+  }
+  function isFollowing() { return followSat; }
+  function isAutoRotate() { return autoRotate; }
+  function hasTarget() { return !!(state.target && state.target.satrec); }
+
+  // Jump the viewpoint to the currently selected satellite and keep it centered (follow).
+  function focusSat() {
+    if (!hasTarget()) return false;
+    autoRotate = false;     // following and auto-rotate are mutually exclusive
+    anim = null;
+    followSat = true;
+    lastInteract = Date.now();
+    notifyControls();
+    return true;
+  }
+
+  function resetCamera() {
+    setFollow(false);
+    // Shortest-path normalize theta so the tween doesn't spin multiple turns
+    const t = 2.3;
+    camTheta = t + Math.atan2(Math.sin(camTheta - t), Math.cos(camTheta - t));
+    anim = { theta: t, phi: 1.15, radius: 3.2 };
+    lastInteract = Date.now();
+  }
+  function toggleAutoRotate() {
+    autoRotate = !autoRotate;
+    if (autoRotate) { setFollow(false); lastInteract = 0; anim = null; }  // resume immediately
+    notifyControls();
+    return autoRotate;
+  }
+  function setControlChangeHandler(fn) { onControlChange = fn; }
+
+  return { setVisible, isVisible, tick, onThemeChange, resetCamera, toggleAutoRotate,
+           focusSat, isFollowing, isAutoRotate, hasTarget, setControlChangeHandler };
+})();
+window.__globe = Globe;
+
+// ----- View toggle + globe HUD wiring -----
+(function wireGlobeUI() {
+  const toggle = document.getElementById('view-toggle');
+  if (!toggle) return;
+  const btns = toggle.querySelectorAll('.view-toggle-btn');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const view = btn.dataset.view;
+      btns.forEach(b => b.classList.toggle('active', b === btn));
+      Globe.setVisible(view === '3d');
+    });
+  });
+  const resetBtn = document.getElementById('globe-reset-btn');
+  if (resetBtn) resetBtn.addEventListener('click', () => Globe.resetCamera());
+  const rotBtn = document.getElementById('globe-rotate-btn');
+  if (rotBtn) rotBtn.addEventListener('click', () => Globe.toggleAutoRotate());
+  const toSatBtn = document.getElementById('globe-tosat-btn');
+  if (toSatBtn) toSatBtn.addEventListener('click', () => {
+    if (!Globe.focusSat()) {
+      // No satellite selected — brief visual nudge
+      toSatBtn.classList.add('nope');
+      setTimeout(() => toSatBtn.classList.remove('nope'), 400);
+    }
+  });
+
+  // Keep button highlight states in sync with the globe's actual control state,
+  // regardless of what triggered a change (button, drag, reset, etc.)
+  function syncControlButtons() {
+    if (rotBtn)   rotBtn.classList.toggle('active', Globe.isAutoRotate());
+    if (toSatBtn) toSatBtn.classList.toggle('active', Globe.isFollowing());
+  }
+  Globe.setControlChangeHandler(syncControlButtons);
+  syncControlButtons();
+
+  // Collapsible Orbital View HUD (mirrors the 2D map legend)
+  const hud = document.getElementById('globe-hud');
+  const hudToggle = document.getElementById('globe-hud-toggle');
+  const HUD_KEY = 'orbital_globe_hud_collapsed_v1';
+  if (hud && hudToggle) {
+    let collapsed = false;
+    try { collapsed = localStorage.getItem(HUD_KEY) === 'true'; } catch (_) {}
+    hud.classList.toggle('collapsed', collapsed);
+    hudToggle.addEventListener('click', () => {
+      collapsed = !collapsed;
+      hud.classList.toggle('collapsed', collapsed);
+      try { localStorage.setItem(HUD_KEY, String(collapsed)); } catch (_) {}
+    });
+  }
+
+  // Observer-footprint toggle in the HUD (synced with the 2D map toggle)
+  const footToggle = document.getElementById('globe-foot-toggle');
+  if (footToggle && typeof window.toggleObsFootprints === 'function') {
+    footToggle.addEventListener('click', window.toggleObsFootprints);
+  }
+  if (typeof applyFootprintUI === 'function') applyFootprintUI();
 })();
 
 } // end initApp
