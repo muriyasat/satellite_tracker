@@ -4881,9 +4881,14 @@ function drawGroundTrack() {
         for (let i = interval; i < seg.length - 1; i += interval) {
           const p1 = seg[i];
           const p2 = seg[i + 1];
-          const angle = Math.atan2(p2[1] - p1[1], p2[0] - p1[0]) * 180 / Math.PI;
+          // Compute the heading in SCREEN pixel space so the arrow matches the drawn
+          // path exactly. Projecting through the map's CRS accounts for the Mercator
+          // latitude stretch and the (north = up) y-flip; the angle is zoom-invariant.
+          const a = map.latLngToLayerPoint(L.latLng(p1[0], p1[1]));
+          const b = map.latLngToLayerPoint(L.latLng(p2[0], p2[1]));
+          const angle = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
           const arrowIcon = L.divIcon({
-            html: `<div style="color:${color};font-size:13px;text-shadow:0 0 6px ${color}, 0 0 2px #000;transform:rotate(${90 - angle}deg);font-weight:bold;">▶</div>`,
+            html: `<div style="color:${color};font-size:13px;text-shadow:0 0 6px ${color}, 0 0 2px #000;transform:rotate(${angle}deg);font-weight:bold;">▶</div>`,
             iconSize: [13, 13], iconAnchor: [6, 6], className: '',
           });
           L.marker(p1, { icon: arrowIcon, interactive: false }).addTo(group);
@@ -7413,6 +7418,52 @@ const Globe = (function () {
     return haloTex;
   }
 
+  function roundRectPath(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  // Billboard text label for a satellite name (always faces the camera).
+  function makeSatLabel(text, colorHex) {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const fontPx = 30, pad = 9;
+    const cv = document.createElement('canvas');
+    const ctx = cv.getContext('2d');
+    const font = `600 ${fontPx}px 'JetBrains Mono', monospace`;
+    ctx.font = font;
+    const tw = Math.ceil(ctx.measureText(text).width);
+    const w = tw + pad * 2, h = fontPx + pad * 2;
+    cv.width = w * dpr; cv.height = h * dpr;
+    ctx.scale(dpr, dpr);
+    ctx.font = font;
+    ctx.textBaseline = 'middle';
+    // translucent pill background + colored border
+    ctx.fillStyle = 'rgba(3, 6, 10, 0.62)';
+    roundRectPath(ctx, 1, 1, w - 2, h - 2, 6); ctx.fill();
+    ctx.globalAlpha = 0.75; ctx.strokeStyle = colorHex; ctx.lineWidth = 1.5;
+    roundRectPath(ctx, 1, 1, w - 2, h - 2, 6); ctx.stroke();
+    ctx.globalAlpha = 1;
+    // glowing text
+    ctx.shadowColor = colorHex; ctx.shadowBlur = 8;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(text, pad, h / 2 + 1);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.minFilter = THREE.LinearFilter;
+    if (THREE.sRGBEncoding !== undefined) tex.encoding = THREE.sRGBEncoding;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: tex, transparent: true, depthWrite: false
+    }));
+    sp.userData.disposeMap = true;       // so clearDynamic frees the texture
+    const baseH = 0.058;                 // scene-unit height of the label
+    sp.scale.set(baseH * (w / h), baseH, 1);
+    return sp;
+  }
+
   function makeStars() {
     const n = 2200;
     const pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
@@ -7494,6 +7545,7 @@ const Globe = (function () {
     dynamic.traverse(o => {
       if (o.geometry) o.geometry.dispose();
       if (o.material) {
+        if (o.userData && o.userData.disposeMap && o.material.map) o.material.map.dispose();
         if (Array.isArray(o.material)) o.material.forEach(m => m.dispose());
         else o.material.dispose();
       }
@@ -7634,6 +7686,12 @@ const Globe = (function () {
         const sd = new THREE.Mesh(new THREE.SphereGeometry(0.006, 8, 8),
           new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.7 }));
         sd.position.copy(sub); dynamic.add(sd);
+        // name label (billboard, offset radially outward from the marker)
+        if (sat.name) {
+          const label = makeSatLabel(sat.name, sat.color);
+          label.position.copy(v.clone().add(v.clone().normalize().multiplyScalar(isPrim ? 0.05 : 0.04)));
+          dynamic.add(label);
+        }
       }
     }
 
