@@ -4000,6 +4000,13 @@ function predictPasses(satrec, observer, hoursOrOptions = 72, minElevation = 0) 
     endTime = new Date(startTime.getTime() + hoursOrOptions * 3600 * 1000);
   }
 
+  // Cap passes per (satellite × observer), scaled to the requested range so that long
+  // custom ranges (e.g. 7+ days) are not truncated. A single observer can physically
+  // see at most ~16 passes/day (one per orbit, e.g. a polar station); 20/day gives
+  // headroom, and the absolute ceiling guards against pathologically large ranges.
+  const durationHours = (endTime.getTime() - startTime.getTime()) / 3600000;
+  const maxPasses = Math.min(2000, Math.max(30, Math.ceil(durationHours / 24) * 20));
+
   let inPass = false;
   let aos = null, los = null;
   let maxEl = -90, maxElTime = null, maxAz = 0;
@@ -4050,7 +4057,7 @@ function predictPasses(satrec, observer, hoursOrOptions = 72, minElevation = 0) 
         // Analyze illumination across the pass
         Object.assign(passObj, analyzePassIllumination(satrec, obs, passObj));
         passes.push(passObj);
-        if (passes.length >= 30) break;
+        if (passes.length >= maxPasses) break;
         maxEl = -90;
       }
     }
@@ -6654,18 +6661,20 @@ function openSatEditor(idx) {
   editor.style.display = '';
   document.getElementById('sat-editor-title').textContent = s ? `▸ Edit: ${s.name}` : '▸ Add Satellite';
 
-  // If editing a manual-only sat, switch to manual tab
+  // Always populate the Manual TLE fields with the current satellite's TLE, so that
+  // switching to the Manual TLE tab shows exactly how this satellite is entered —
+  // regardless of whether it was added by name/ID or manually.
+  document.getElementById('sat-manual-name').value = s ? (s.name || '') : '';
+  document.getElementById('sat-manual-l1').value = (s && s.l1) ? s.l1 : '';
+  document.getElementById('sat-manual-l2').value = (s && s.l2) ? s.l2 : '';
+
+  // Default tab: manual-only sats open on Manual TLE; sats with a NORAD ID open on By Name / ID
   if (s && !s.norad && s.l1 && s.l2) {
     setSatMethod('manual');
-    document.getElementById('sat-manual-name').value = s.name;
-    document.getElementById('sat-manual-l1').value = s.l1;
-    document.getElementById('sat-manual-l2').value = s.l2;
+    document.getElementById('sat-query').value = '';
   } else {
     setSatMethod('auto');
     document.getElementById('sat-query').value = s ? (s.norad || s.name) : '';
-    document.getElementById('sat-manual-name').value = '';
-    document.getElementById('sat-manual-l1').value = '';
-    document.getElementById('sat-manual-l2').value = '';
   }
 
   document.getElementById('sat-fetch-status').style.display = 'none';
