@@ -2,7 +2,7 @@
   "name": "ORBITAL — Satellite Tracker",
   "short_name": "ORBITAL",
   "description": "Real-time satellite tracking, pass predictions, and 2D/3D orbital visualization.",
-  "start_url": "index.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
