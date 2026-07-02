@@ -1,7 +1,6 @@
 // ORBITAL service worker — caches the app shell so the installed app launches
 // reliably (and offline for the shell). CDNs, map tiles, and TLE fetches are
 // left untouched (network) so live behavior is unchanged when online.
-// test
 const CACHE = 'orbital-shell-v1';
 const SHELL = [
   './',
