@@ -5,7 +5,6 @@ const CACHE = 'orbital-shell-v1';
 const SHELL = [
   './',
   'index.html',
-  'satellite-tracker.html',
   'manifest.webmanifest',
   'icon-192.png',
   'icon-512.png',
