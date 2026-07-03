@@ -1871,6 +1871,9 @@
         <div class="btn-row" style="margin-top:6px;">
           <button class="btn ghost" id="reset-sats-btn" title="Restore defaults">⟲ Reset to defaults</button>
         </div>
+        <div class="btn-row" style="margin-top:6px;">
+          <button class="btn" id="share-btn" title="Share your satellites & ground stations, or import a shared setup" style="width:100%;">⤴ Share / Import Setup</button>
+        </div>
         <div id="my-sat-status" class="note" style="margin-top:8px;display:none;"></div>
       </div>
     </div>
@@ -1932,6 +1935,44 @@
         <button class="btn" id="load-celestrak">▸ Fetch Catalog</button>
         <div id="catalog-status" class="note">Browse to find new satellites, then click ⊕ to save.</div>
         <div class="sat-list" id="sat-list" style="display:none;max-height:240px;"></div>
+      </div>
+    </div>
+
+    <!-- Share / Import setup dialog (inline) -->
+    <div class="panel" id="share-dialog" style="display:none; border-color: var(--cyan);">
+      <div class="panel-header" style="background: rgba(0,229,255,0.06);">
+        <span class="panel-title" style="color:var(--cyan);">▸ Share / Import Setup</span>
+        <span class="panel-title" style="cursor:pointer;color:var(--red);" id="share-close">✕</span>
+      </div>
+      <div class="panel-body">
+        <div id="share-incoming-note" class="note" style="display:none; margin-bottom:12px; border:1px solid var(--amber); color:var(--amber); padding:8px 10px;"></div>
+
+        <div style="color:var(--cyan);font-size:10px;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:6px;">◂ Share your setup</div>
+        <div id="share-summary" class="note" style="margin-bottom:8px;"></div>
+        <label>Share link (anyone who opens it can import your setup)</label>
+        <textarea id="share-link" readonly rows="3" style="font-size:10px;word-break:break-all;" onclick="this.select()"></textarea>
+        <div class="btn-row" style="margin-top:8px;">
+          <button class="btn" id="share-copy-link">⧉ Copy link</button>
+          <button class="btn ghost" id="share-copy-code" title="Copy just the code (paste into Import below)">⧉ Copy code</button>
+        </div>
+        <div class="btn-row" style="margin-top:6px;">
+          <button class="btn ghost" id="share-download" style="width:100%;">⭳ Download as .json file</button>
+        </div>
+
+        <div style="height:1px;background:var(--border);margin:14px 0;"></div>
+
+        <div style="color:var(--cyan);font-size:10px;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:6px;">▸ Import a setup</div>
+        <label>Paste a share link, code, or JSON</label>
+        <textarea id="share-import-text" rows="3" placeholder="Paste here, or load a .json file below..." style="font-size:10px;"></textarea>
+        <div class="btn-row" style="margin-top:8px;">
+          <button class="btn amber" id="share-import-merge" title="Add shared items, keeping your current ones">⊕ Merge</button>
+          <button class="btn ghost" id="share-import-replace" title="Replace your current setup with the shared one">⇄ Replace</button>
+        </div>
+        <div class="btn-row" style="margin-top:6px;">
+          <label class="btn ghost" for="share-import-file" style="width:100%;text-align:center;cursor:pointer;">⭱ Load .json file…</label>
+          <input id="share-import-file" type="file" accept=".json,application/json" style="display:none;">
+        </div>
+        <div id="share-status" class="note" style="margin-top:10px;display:none;"></div>
       </div>
     </div>
 
@@ -8012,6 +8053,269 @@ window.__globe = Globe;
     footToggle.addEventListener('click', window.toggleObsFootprints);
   }
   if (typeof applyFootprintUI === 'function') applyFootprintUI();
+})();
+
+// ============= SHARE / IMPORT SETUP (satellites + ground stations) =============
+(function setupShareFeature() {
+  const SHARE_VERSION = 1;
+  const $ = (id) => document.getElementById(id);
+
+  function b64urlEncode(str) {
+    return btoa(unescape(encodeURIComponent(str)))
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function b64urlDecode(s) {
+    s = String(s).replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    return decodeURIComponent(escape(atob(s)));
+  }
+
+  function buildPayload() {
+    const sats = (state.mySats || []).map(s => {
+      const o = { name: s.name };
+      if (s.norad) o.norad = s.norad;
+      if (s.l1 && s.l2) { o.l1 = s.l1; o.l2 = s.l2; }
+      if (s.color) o.color = s.color;
+      o.active = s.active !== false;
+      return o;
+    });
+    const obs = (state.observers || []).map(o => ({
+      name: o.name, lat: o.lat, lon: o.lon, alt: o.alt,
+      color: o.color, active: o.active !== false
+    }));
+    return { app: 'orbital', v: SHARE_VERSION, sats, obs };
+  }
+
+  function encodeConfig() { return b64urlEncode(JSON.stringify(buildPayload())); }
+
+  function shareURL() {
+    const base = location.href.split('#')[0];
+    return base + '#config=' + encodeConfig();
+  }
+
+  function parsePayload(raw) {
+    raw = (raw || '').trim();
+    if (!raw) throw new Error('nothing to read');
+    const m = raw.match(/[#?&]config=([^&\s]+)/);
+    if (m) raw = m[1];
+    const json = (raw[0] === '{') ? raw : b64urlDecode(raw);
+    const data = JSON.parse(json);
+    if (!data || data.app !== 'orbital' || (!Array.isArray(data.sats) && !Array.isArray(data.obs))) {
+      throw new Error('not an ORBITAL setup');
+    }
+    return data;
+  }
+
+  function sanitize(data) {
+    const sats = (Array.isArray(data.sats) ? data.sats : []).filter(s =>
+      s && typeof s.name === 'string' &&
+      (typeof s.norad === 'string' || (typeof s.l1 === 'string' && typeof s.l2 === 'string'))
+    ).map(s => ({
+      name: String(s.name).slice(0, 60),
+      norad: typeof s.norad === 'string' ? s.norad : undefined,
+      l1: typeof s.l1 === 'string' ? s.l1 : undefined,
+      l2: typeof s.l2 === 'string' ? s.l2 : undefined,
+      color: typeof s.color === 'string' ? s.color : undefined,
+      active: s.active !== false
+    }));
+    const obs = (Array.isArray(data.obs) ? data.obs : []).filter(o =>
+      o && typeof o.name === 'string' && isFinite(+o.lat) && isFinite(+o.lon)
+    ).map(o => ({
+      name: String(o.name).slice(0, 60),
+      lat: Math.max(-90, Math.min(90, +o.lat)),
+      lon: ((((+o.lon) + 180) % 360 + 360) % 360) - 180,
+      alt: isFinite(+o.alt) ? +o.alt : 0,
+      color: typeof o.color === 'string' ? o.color : undefined,
+      active: o.active !== false
+    }));
+    return { sats, obs };
+  }
+
+  function applyImport(clean, mode) {
+    // ---- Satellites ----
+    const skey = s => (s.norad ? 'n:' + s.norad : 'l:' + (s.l1 || s.name));
+    if (mode === 'replace') {
+      state.mySats = clean.sats.map((s, i) => ({ ...s, color: s.color || SAT_COLORS[i % SAT_COLORS.length] }));
+    } else {
+      const have = new Set(state.mySats.map(skey));
+      for (const s of clean.sats) {
+        const k = skey(s);
+        if (have.has(k)) {
+          const ex = state.mySats.find(e => skey(e) === k);
+          if (ex && s.l1 && s.l2) { ex.l1 = s.l1; ex.l2 = s.l2; }   // refresh TLE
+          continue;
+        }
+        state.mySats.push({ ...s, color: s.color || nextSatColor() });
+        have.add(k);
+      }
+    }
+    state.mySats.forEach((s, i) => { if (!s.color) s.color = SAT_COLORS[i % SAT_COLORS.length]; });
+
+    // ---- Observers (regenerate ids to avoid collisions) ----
+    const mkId = () => 'obs-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+    const incoming = clean.obs.map(o => ({ ...o, id: mkId(), color: o.color || '#00e5ff' }));
+    if (mode === 'replace') {
+      if (incoming.length) {
+        state.observers = incoming;
+        state.primaryObserverId = (incoming.find(o => o.active) || incoming[0]).id;
+      }
+    } else {
+      const dup = o => state.observers.some(e =>
+        e.name === o.name && Math.abs(e.lat - o.lat) < 1e-4 && Math.abs(e.lon - o.lon) < 1e-4);
+      for (const o of incoming) if (!dup(o)) state.observers.push(o);
+    }
+    if (!state.observers.some(o => o.id === state.primaryObserverId)) {
+      const first = state.observers.find(o => o.active) || state.observers[0];
+      if (first) state.primaryObserverId = first.id;
+    }
+
+    // ---- Persist + refresh everything ----
+    saveMySatsToStorage();
+    saveObserversToStorage();
+    renderMySatList();
+    renderObserverList();
+    refreshObserverMarkers();
+    state.nextPassCache = null;
+    if (typeof populateSatSatSelectors === 'function') populateSatSatSelectors();
+    recomputePasses();
+    drawGroundTrack();
+    if (window.__globe && window.__globe.isVisible()) window.__globe.tick();
+
+    // Best-effort: fetch TLEs for active sats that arrived with only a NORAD id
+    const needTLE = state.mySats.filter(s => s.active && s.norad && !(s.l1 && s.l2));
+    if (needTLE.length && typeof ensureTLE === 'function') {
+      Promise.allSettled(needTLE.map(ensureTLE)).then(() => {
+        saveMySatsToStorage(); renderMySatList(); recomputePasses(); drawGroundTrack(); refreshObserverMarkers();
+      });
+    }
+  }
+
+  // ---------- UI ----------
+  function status(msg, kind) {
+    const el = $('share-status'); if (!el) return;
+    el.style.display = 'block';
+    el.textContent = msg;
+    el.style.color = kind === 'err' ? 'var(--red)' : (kind === 'ok' ? 'var(--green)' : 'var(--text-dim)');
+  }
+
+  function refreshShareOutputs() {
+    const nS = (state.mySats || []).length, nO = (state.observers || []).length;
+    const withTle = (state.mySats || []).filter(s => s.l1 && s.l2).length;
+    const sum = $('share-summary');
+    if (sum) sum.textContent = `Sharing ${nS} satellite${nS !== 1 ? 's' : ''} (${withTle} with TLE) · ${nO} ground station${nO !== 1 ? 's' : ''}.`;
+    const link = $('share-link');
+    if (link) link.value = shareURL();
+  }
+
+  function openShareDialog() {
+    const d = $('share-dialog'); if (!d) return;
+    refreshShareOutputs();
+    d.style.display = '';
+    d.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  function closeShareDialog() {
+    const d = $('share-dialog'); if (d) d.style.display = 'none';
+    const note = $('share-incoming-note'); if (note) note.style.display = 'none';
+  }
+
+  function copyText(text, okMsg) {
+    const done = () => status(okMsg, 'ok');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(() => fallback());
+    } else fallback();
+    function fallback() {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); done(); }
+      catch (_) { status('Copy failed — select the text and copy manually.', 'err'); }
+      document.body.removeChild(ta);
+    }
+  }
+
+  function doImport(mode) {
+    try {
+      const text = $('share-import-text').value;
+      const clean = sanitize(parsePayload(text));
+      if (!clean.sats.length && !clean.obs.length) throw new Error('nothing to import');
+      applyImport(clean, mode);
+      status(`Imported ${clean.sats.length} satellite${clean.sats.length !== 1 ? 's' : ''} and ${clean.obs.length} ground station${clean.obs.length !== 1 ? 's' : ''} (${mode}).`, 'ok');
+      const note = $('share-incoming-note'); if (note) note.style.display = 'none';
+      refreshShareOutputs();
+    } catch (e) {
+      status('Import failed: ' + e.message, 'err');
+    }
+  }
+
+  function showIncoming(nSats, nObs) {
+    const note = $('share-incoming-note');
+    if (!note) return;
+    note.style.display = 'block';
+    note.textContent = `⤵ Received a shared setup: ${nSats} satellite${nSats !== 1 ? 's' : ''} and ${nObs} ground station${nObs !== 1 ? 's' : ''}. Choose ⊕ Merge (keep yours) or ⇄ Replace below.`;
+  }
+
+  function checkSharedConfigInURL() {
+    const m = (location.hash || '').match(/[#&]config=([^&]+)/);
+    if (!m) return;
+    try {
+      const clean = sanitize(parsePayload(m[1]));
+      // Strip the hash so a reload / re-render doesn't reprompt
+      try { history.replaceState(null, '', location.href.split('#')[0]); } catch (_) {}
+      openShareDialog();
+      const ta = $('share-import-text'); if (ta) ta.value = m[1];
+      showIncoming(clean.sats.length, clean.obs.length);
+    } catch (_) { /* invalid config in URL — ignore silently */ }
+  }
+
+  // ---------- Wiring ----------
+  const shareBtn = $('share-btn');
+  if (shareBtn) shareBtn.addEventListener('click', () => {
+    const d = $('share-dialog');
+    if (d && d.style.display === 'none') openShareDialog(); else closeShareDialog();
+  });
+  const closeBtn = $('share-close');
+  if (closeBtn) closeBtn.addEventListener('click', closeShareDialog);
+
+  const copyLink = $('share-copy-link');
+  if (copyLink) copyLink.addEventListener('click', () => copyText(shareURL(), 'Share link copied to clipboard.'));
+  const copyCode = $('share-copy-code');
+  if (copyCode) copyCode.addEventListener('click', () => copyText(encodeConfig(), 'Share code copied to clipboard.'));
+
+  const dl = $('share-download');
+  if (dl) dl.addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(buildPayload(), null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 10);
+    a.href = url; a.download = `orbital-setup-${stamp}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    status('Downloaded orbital-setup.json', 'ok');
+  });
+
+  const merge = $('share-import-merge');
+  if (merge) merge.addEventListener('click', () => doImport('merge'));
+  const replace = $('share-import-replace');
+  if (replace) replace.addEventListener('click', () => {
+    if (confirm('Replace your current satellites and ground stations with the shared setup?')) doImport('replace');
+  });
+
+  const fileInput = $('share-import-file');
+  if (fileInput) fileInput.addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const ta = $('share-import-text'); if (ta) ta.value = String(reader.result || '');
+      status('File loaded — choose ⊕ Merge or ⇄ Replace.', 'ok');
+    };
+    reader.onerror = () => status('Could not read file.', 'err');
+    reader.readAsText(f);
+    fileInput.value = '';
+  });
+
+  // Auto-detect a shared setup in the URL on load
+  checkSharedConfigInURL();
 })();
 
 } // end initApp
