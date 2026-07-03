@@ -1531,19 +1531,13 @@
      controls on the other half. */
 
   body.fold-mode.force-desktop .container {
-    /* Column/row sizes driven by CSS variables so the user can drag-resize them.
-       Defaults: map = 1fr, controls = 1fr; rows data:catalog:passes = 2:2:3 */
+    /* Right side becomes a tabbed area: a tab bar row + a single content row that
+       shows only the selected pane (data / catalog / passes). Map stays on the left. */
     grid-template-columns: var(--fold-map-fr, 1fr) 6px var(--fold-ctrl-fr, 1fr) !important;
-    grid-template-rows:
-      minmax(0, var(--fold-data-fr, 2fr)) 6px
-      minmax(0, var(--fold-catalog-fr, 2fr)) 6px
-      minmax(0, var(--fold-passes-fr, 3fr)) !important;
+    grid-template-rows: auto 1fr !important;
     grid-template-areas:
-      "map  colsplit data"
-      "map  colsplit rowsplit1"
-      "map  colsplit catalog"
-      "map  colsplit rowsplit2"
-      "map  colsplit passes" !important;
+      "map  colsplit foldtabs"
+      "map  colsplit content" !important;
     gap: 0 !important;
     padding: 10px !important;
     height: calc(100vh - 70px);
@@ -1556,26 +1550,69 @@
     margin-right: 4px;
   }
   body.fold-mode.force-desktop [data-pane="data"] {
-    grid-area: data !important;
+    grid-area: content !important;
     overflow-y: auto;
     min-height: 0;
-    margin-bottom: 4px;
+    margin: 0;
   }
   body.fold-mode.force-desktop [data-pane="catalog"] {
-    grid-area: catalog !important;
+    grid-area: content !important;
     overflow-y: auto;
     min-height: 0;
-    margin-bottom: 4px;
+    margin: 0;
   }
   body.fold-mode.force-desktop [data-pane="passes"] {
-    grid-area: passes !important;
+    grid-area: content !important;
     display: flex !important;
     flex-direction: column;
     min-height: 0;
     overflow: hidden;
+    margin: 0;
+  }
+  /* Show only the pane matching the selected fold tab */
+  body.fold-mode.force-desktop .container[data-fold-tab="data"]    [data-pane="catalog"],
+  body.fold-mode.force-desktop .container[data-fold-tab="data"]    [data-pane="passes"],
+  body.fold-mode.force-desktop .container[data-fold-tab="catalog"] [data-pane="data"],
+  body.fold-mode.force-desktop .container[data-fold-tab="catalog"] [data-pane="passes"],
+  body.fold-mode.force-desktop .container[data-fold-tab="passes"]  [data-pane="data"],
+  body.fold-mode.force-desktop .container[data-fold-tab="passes"]  [data-pane="catalog"] {
+    display: none !important;
+  }
+  /* Fold feature tabs (top of the right column) */
+  .fold-tabs { display: none; }
+  body.fold-mode.force-desktop .fold-tabs {
+    grid-area: foldtabs;
+    display: flex;
+    gap: 6px;
+    padding: 0 0 8px 0;
+  }
+  .fold-tab {
+    flex: 1;
+    background: var(--panel-2);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+    padding: 13px 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+  }
+  .fold-tab:hover { color: var(--text); }
+  .fold-tab.active {
+    color: var(--cyan);
+    background: rgba(0, 229, 255, 0.10);
+    border-bottom-color: var(--cyan);
+    text-shadow: var(--glow-cyan);
   }
   /* Drag handles for resizing */
   body.fold-mode.force-desktop .fold-resizer { display: block !important; }
+  /* Row resizers are unused in the tabbed layout — keep only the map/controls split */
+  body.fold-mode.force-desktop .fold-resizer-row1,
+  body.fold-mode.force-desktop .fold-resizer-row2 { display: none !important; }
   .fold-resizer { display: none; position: relative; z-index: 50; }
   .fold-resizer-col {
     grid-area: colsplit;
@@ -1798,12 +1835,19 @@
   <button class="tab-btn" data-tab="passes">↗ Passes</button>
 </nav>
 
-<div class="container">
+<div class="container" data-fold-tab="data">
 
   <!-- Fold-mode drag resize handles (only visible in fold mode) -->
   <div class="fold-resizer fold-resizer-col" id="fold-resizer-col" title="Drag to resize map / controls width"></div>
   <div class="fold-resizer fold-resizer-row1" id="fold-resizer-row1" title="Drag to resize telemetry / catalog height"></div>
   <div class="fold-resizer fold-resizer-row2" id="fold-resizer-row2" title="Drag to resize catalog / passes height"></div>
+
+  <!-- Fold-mode feature tabs (only visible in fold mode) -->
+  <nav class="fold-tabs" id="fold-tabs">
+    <button class="fold-tab active" data-fold-tab="data" type="button">◉ Telemetry</button>
+    <button class="fold-tab" data-fold-tab="catalog" type="button">⊕ Setup</button>
+    <button class="fold-tab" data-fold-tab="passes" type="button">▤ Passes</button>
+  </nav>
 
   <!-- LEFT COLUMN: Input -->
   <aside class="col" data-pane="catalog">
@@ -3351,6 +3395,35 @@ document.getElementById('footprint-toggle').addEventListener('click', window.tog
   // row1 between data and catalog; row2 between catalog and passes
   setupRowResizer('fold-resizer-row1', 'dataFr', 'catalogFr');
   setupRowResizer('fold-resizer-row2', 'catalogFr', 'passesFr');
+})();
+
+// ============= FOLD-MODE FEATURE TABS =============
+// In fold mode the right side stacks three panes (telemetry / setup / passes).
+// These tabs let the user view one at a time for readability. No effect outside fold mode.
+(function setupFoldTabs() {
+  const container = document.querySelector('.container');
+  const tabs = document.getElementById('fold-tabs');
+  if (!container || !tabs) return;
+  const KEY = 'orbital_fold_tab_v1';
+  const VALID = ['data', 'catalog', 'passes'];
+  const btns = Array.from(tabs.querySelectorAll('.fold-tab'));
+
+  let current = 'data';
+  try { const s = localStorage.getItem(KEY); if (VALID.includes(s)) current = s; } catch (_) {}
+
+  function apply(tab) {
+    if (!VALID.includes(tab)) tab = 'data';
+    current = tab;
+    container.dataset.foldTab = tab;
+    btns.forEach(b => b.classList.toggle('active', b.dataset.foldTab === tab));
+    try { localStorage.setItem(KEY, tab); } catch (_) {}
+    // Let internal layouts (map / pass table / sky view) settle after becoming visible
+    if (window._map) setTimeout(() => { try { window._map.invalidateSize({ animate: false }); } catch (_) {} }, 60);
+    if (window._positionResizeHandles) setTimeout(window._positionResizeHandles, 60);
+  }
+
+  btns.forEach(b => b.addEventListener('click', () => apply(b.dataset.foldTab)));
+  apply(current);
 })();
 
 // ============= DESKTOP DRAG-RESIZE (column widths + passes height) =============
