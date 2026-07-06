@@ -2236,6 +2236,10 @@
             <button class="pass-mode-btn" data-pass-mode="multi" title="Multi-contact mode — find times when 2+ satellites are simultaneously visible">⧉ Multi</button>
             <button class="pass-mode-btn" data-pass-mode="satsat" title="Sat-to-Sat imaging mode — when one satellite can image another">⊕ Sat-Sat</button>
           </div>
+          <div class="pass-mode-toggle" id="pass-tz-toggle" title="Timezone for Compact / Multi pass times">
+            <button class="pass-mode-btn" data-pass-tz="utc" title="Show pass times in UTC">UTC</button>
+            <button class="pass-mode-btn" data-pass-tz="kst" title="Show pass times in KST (UTC+9)">KST</button>
+          </div>
           <span class="panel-title" id="pass-count" style="color:var(--cyan);"></span>
         </div>
       </div>
@@ -2336,8 +2340,8 @@
               <th>Sat</th>
               <th>Obs</th>
               <th>Date</th>
-              <th>AOS <span style="color:var(--amber)">KST</span></th>
-              <th>LOS <span style="color:var(--amber)">KST</span></th>
+              <th>AOS <span class="pass-tz-label" style="color:var(--amber)">KST</span></th>
+              <th>LOS <span class="pass-tz-label" style="color:var(--amber)">KST</span></th>
               <th>Max El</th>
               <th>Dur</th>
               <th title="Optical visibility">Vis</th>
@@ -2348,8 +2352,8 @@
               <th>#</th>
               <th>Observer</th>
               <th>Sats Visible</th>
-              <th>Start <span style="color:var(--amber)">KST</span></th>
-              <th>End <span style="color:var(--amber)">KST</span></th>
+              <th>Start <span class="pass-tz-label" style="color:var(--amber)">KST</span></th>
+              <th>End <span class="pass-tz-label" style="color:var(--amber)">KST</span></th>
               <th>Overlap</th>
             </tr>
           </thead>
@@ -5051,6 +5055,20 @@ function drawGroundTrack() {
 // Default to compact mode on mobile for easier scanning of many passes
 let passDisplayMode = window.innerWidth <= 900 ? 'compact' : 'detail';
 
+// Timezone for the time-only pass displays (Compact / Multi). 'kst' (default) or 'utc'.
+let passTimezone = 'kst';
+try { const _tz = localStorage.getItem('orbital_pass_tz_v1'); if (_tz === 'utc' || _tz === 'kst') passTimezone = _tz; } catch (_) {}
+
+function fmtUTCDateOnly(d) {
+  return `${pad(d.getUTCMonth() + 1)}/${pad(d.getUTCDate())}`;
+}
+function fmtPassTime(d) {
+  return passTimezone === 'utc' ? fmtTime(d) : fmtKSTTime(d);
+}
+function fmtPassDateOnly(d) {
+  return passTimezone === 'utc' ? fmtUTCDateOnly(d) : fmtKSTDateOnly(d);
+}
+
 function fmtKSTDateOnly(d) {
   const k = new Date(d.getTime() + 9 * 3600 * 1000);
   return `${pad(k.getUTCMonth()+1)}/${pad(k.getUTCDate())}`;
@@ -5127,14 +5145,14 @@ function renderPassTable(passes) {
           <span style="color:var(--text-dim);font-size:10px;">${s.maxEl.toFixed(0)}°</span>
         </span>`
       ).join('');
-      const dateStr = fmtKSTDateOnly(ev.startTime);
+      const dateStr = fmtPassDateOnly(ev.startTime);
       return `
       <tr class="${classes.join(' ')}" data-multi-index="${i}" style="cursor:pointer;">
         <td class="num-cell" data-label="#">${pad(i+1)}</td>
         <td data-label="Observer"><span class="obs-chip" style="background:${ev.observerColor};box-shadow:0 0 4px ${ev.observerColor};"></span><span class="obs-name-cell" style="color:${ev.observerColor};">${ev.observerName}</span></td>
         <td data-label="Sats Visible"><div style="display:flex;flex-wrap:wrap;gap:4px 0;">${satChips}</div><div class="small" style="color:var(--text-dim);">${ev.sats.length} sats simultaneously</div></td>
-        <td data-label="Start"><span style="color:var(--magenta);font-weight:500;">${fmtKSTTime(ev.startTime)}</span><div class="small">${dateStr}</div></td>
-        <td data-label="End"><span style="color:var(--magenta);font-weight:500;">${fmtKSTTime(ev.endTime)}</span></td>
+        <td data-label="Start"><span style="color:var(--magenta);font-weight:500;">${fmtPassTime(ev.startTime)}</span><div class="small">${dateStr}</div></td>
+        <td data-label="End"><span style="color:var(--magenta);font-weight:500;">${fmtPassTime(ev.endTime)}</span></td>
         <td data-label="Overlap"><span style="color:var(--cyan);font-weight:500;">${fmtDuration(ev.duration)}</span></td>
       </tr>`;
     }).join('');
@@ -5162,8 +5180,8 @@ function renderPassTable(passes) {
       const classes = [];
       if (passing) classes.push('passing');
       if (selected) classes.push('selected');
-      const prevDate = i > 0 ? fmtKSTDateOnly(passes[i-1].aos) : null;
-      const thisDate = fmtKSTDateOnly(p.aos);
+      const prevDate = i > 0 ? fmtPassDateOnly(passes[i-1].aos) : null;
+      const thisDate = fmtPassDateOnly(p.aos);
       const dateLabel = (i === 0 || prevDate !== thisDate) ? thisDate : '';
       const obsColor = p.observerColor || 'var(--text-dim)';
       const obsName = p.observerName || '—';
@@ -5176,8 +5194,8 @@ function renderPassTable(passes) {
         <td data-label="Sat"><span class="obs-chip" style="background:${satColor};box-shadow:0 0 4px ${satColor};"></span><span class="obs-name-cell" style="color:${satColor};font-weight:500;">${satName}</span></td>
         <td data-label="Obs"><span class="obs-chip" style="background:${obsColor};box-shadow:0 0 4px ${obsColor};"></span><span class="obs-name-cell">${obsName}</span></td>
         <td data-label="Date" style="color:${dateLabel ? 'var(--cyan)' : 'var(--text-faint)'};font-weight:${dateLabel ? '500' : '300'}">${dateLabel || '〃'}</td>
-        <td data-label="AOS KST"><span style="color:var(--amber);font-weight:500;">${fmtKSTTime(p.aos)}</span></td>
-        <td data-label="LOS KST"><span style="color:var(--amber);font-weight:500;">${fmtKSTTime(p.los)}</span></td>
+        <td data-label="AOS"><span style="color:var(--amber);font-weight:500;">${fmtPassTime(p.aos)}</span></td>
+        <td data-label="LOS"><span style="color:var(--amber);font-weight:500;">${fmtPassTime(p.los)}</span></td>
         <td data-label="Max El"><span style="color:var(--cyan);font-weight:500;">${p.maxEl.toFixed(0)}°</span></td>
         <td data-label="Dur">${fmtDuration(p.duration)}</td>
         <td data-label="Vis">${illumIcon}</td>
@@ -5909,9 +5927,31 @@ document.querySelectorAll('.pass-mode-btn[data-pass-mode]').forEach(btn => {
         body.style.maxHeight = (passDisplayMode === 'compact' || passDisplayMode === 'multi' || passDisplayMode === 'satsat') ? '60vh' : '320px';
       }
     }
+    if (typeof updatePassTzToggleVisibility === 'function') updatePassTzToggleVisibility();
     renderPassTable(state.passes);
   });
 });
+
+// ---- Pass time timezone toggle (UTC / KST) for Compact & Multi modes ----
+function updatePassTzToggleVisibility() {
+  const t = document.getElementById('pass-tz-toggle');
+  if (t) t.style.display = (passDisplayMode === 'compact' || passDisplayMode === 'multi') ? '' : 'none';
+}
+function applyPassTz(tz) {
+  passTimezone = (tz === 'utc') ? 'utc' : 'kst';
+  document.querySelectorAll('.pass-mode-btn[data-pass-tz]').forEach(b =>
+    b.classList.toggle('active', b.dataset.passTz === passTimezone));
+  document.querySelectorAll('.pass-tz-label').forEach(el => { el.textContent = passTimezone.toUpperCase(); });
+  try { localStorage.setItem('orbital_pass_tz_v1', passTimezone); } catch (_) {}
+  renderPassTable(state.passes || []);
+}
+document.querySelectorAll('.pass-mode-btn[data-pass-tz]').forEach(btn => {
+  btn.classList.toggle('active', btn.dataset.passTz === passTimezone);
+  btn.addEventListener('click', () => applyPassTz(btn.dataset.passTz));
+});
+// Initialize labels + toggle visibility (no re-render needed at startup)
+document.querySelectorAll('.pass-tz-label').forEach(el => { el.textContent = passTimezone.toUpperCase(); });
+updatePassTzToggleVisibility();
 
 // ============= SAT-SAT MODE HANDLERS =============
 document.getElementById('satsat-compute').addEventListener('click', computeSatSatContactsForUI);
