@@ -752,7 +752,15 @@
   .footer-bar .blink { animation: pulse 1.2s infinite; color: var(--green); }
 
   /* Observer list */
-  .observer-list { display: flex; flex-direction: column; gap: 6px; }
+  .observer-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 300px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 2px;
+  }
   .observer-item {
     display: flex;
     align-items: center;
@@ -1724,6 +1732,7 @@
     transform: scale(1.25);
     margin: 0 8px;
   }
+  body.fold-mode.force-desktop .observer-list { max-height: 40vh; }
   body.fold-mode .observer-item,
   body.fold-mode .my-sat-item {
     padding: 13px 14px;
