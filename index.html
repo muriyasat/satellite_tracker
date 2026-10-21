@@ -9,6 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#03060b">
 <meta name="color-scheme" content="dark">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="application-name" content="ORBITAL">
 <!-- iOS standalone support -->
@@ -383,6 +384,12 @@
   /* Apply dark filter only to the tile layer, not overlays */
   .leaflet-tile-pane {
     filter: var(--map-filter);
+  }
+  /* Satellite-imagery base map (NASA Blue Marble): don't invert — just tone it per theme */
+  #map.map-src-imagery .leaflet-tile-pane { filter: brightness(0.72) saturate(0.9) contrast(1.05); }
+  [data-theme="light"] #map.map-src-imagery .leaflet-tile-pane { filter: none; }
+  [data-theme="phosphor"] #map.map-src-imagery .leaflet-tile-pane {
+    filter: grayscale(1) sepia(1) hue-rotate(80deg) saturate(2.5) brightness(0.62) contrast(1.15);
   }
   .leaflet-container { background: var(--bg-2); }
 
@@ -1796,7 +1803,8 @@
   body.fold-mode .legend-swatch,
   body.fold-mode .legend-dot { width: 22px; height: 14px; }
   body.fold-mode .legend-dot { border-radius: 50%; width: 14px; height: 14px; }
-  body.fold-mode #track-mode-select {
+  body.fold-mode #track-mode-select,
+  body.fold-mode #tile-source-select {
     font-size: 11px !important;
     padding: 6px 8px !important;
   }
@@ -1953,6 +1961,7 @@
 
         <!-- Manual TLE -->
         <div id="sat-method-manual" style="display:none;">
+          <div id="sat-manual-omm-note" class="note" style="display:none;margin-bottom:8px;color:var(--amber);font-style:normal;"></div>
           <label>Display Name</label>
           <input id="sat-manual-name" type="text" placeholder="e.g. My Custom Sat">
           <label>TLE Line 1</label>
@@ -2069,6 +2078,13 @@
           <span id="footprint-toggle-label">Obs footprints ◯</span>
         </div>
         <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+            <span style="color:var(--text-dim);font-size:9px;letter-spacing:0.1em;">MAP</span>
+            <select id="tile-source-select" title="Base map source" style="flex:1;background:var(--panel-2);color:var(--text);border:1px solid var(--border-bright);padding:2px 4px;font-family:'JetBrains Mono',monospace;font-size:10px;">
+              <option value="gibs">NASA Blue Marble</option>
+              <option value="osm">OpenStreetMap</option>
+            </select>
+          </div>
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
             <span style="color:var(--text-dim);font-size:9px;letter-spacing:0.1em;">TRACK</span>
             <select id="track-mode-select" style="flex:1;background:var(--panel-2);color:var(--text);border:1px solid var(--border-bright);padding:2px 4px;font-family:'JetBrains Mono',monospace;font-size:10px;">
@@ -2837,11 +2853,55 @@ window.addEventListener('orientationchange', () => {
     }, delay);
   });
 });
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '© OpenStreetMap · SGP4 propagation via satellite.js · TLE: CelesTrak',
-  maxZoom: 8,
-  minZoom: 0,
-}).addTo(map);
+// ============= BASE MAP TILE SOURCES =============
+// OpenStreetMap's public tile servers block clients they consider non-compliant (HTTP 403
+// "Access blocked" tiles). Default to NASA GIBS (open data, no API key); OSM stays selectable.
+const TILE_SOURCES = {
+  gibs: {
+    label: 'NASA Blue Marble',
+    // WMTS REST order is {TileMatrix}/{TileRow}/{TileCol} = {z}/{y}/{x}; Level8 = zoom 0..8
+    url: 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg',
+    options: {
+      maxZoom: 8, maxNativeZoom: 8, minZoom: 0,
+      attribution: 'Imagery © <a href="https://www.earthdata.nasa.gov/data/tools/gibs" target="_blank" rel="noopener">NASA GIBS</a> Blue Marble',
+    },
+    imagery: true,
+  },
+  osm: {
+    label: 'OpenStreetMap',
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',   // no {s}: subdomains are deprecated
+    options: {
+      maxZoom: 8, minZoom: 0,
+      referrerPolicy: 'strict-origin-when-cross-origin',     // OSM requires a Referer on web traffic
+      attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
+    },
+    imagery: false,
+  },
+};
+const TILE_SOURCE_KEY = 'orbital_tile_source_v1';
+let baseLayer = null;
+let tileSourceKey = 'gibs';
+try { const _ts = localStorage.getItem(TILE_SOURCE_KEY); if (TILE_SOURCES[_ts]) tileSourceKey = _ts; } catch (_) {}
+
+function setTileSource(key, persist = true) {
+  if (!TILE_SOURCES[key]) key = 'gibs';
+  const src = TILE_SOURCES[key];
+  if (baseLayer) map.removeLayer(baseLayer);
+  baseLayer = L.tileLayer(src.url, src.options).addTo(map);
+  if (baseLayer.bringToBack) baseLayer.bringToBack();
+  tileSourceKey = key;
+  const mapEl = document.getElementById('map');
+  if (mapEl) mapEl.classList.toggle('map-src-imagery', !!src.imagery);
+  const sel = document.getElementById('tile-source-select');
+  if (sel) sel.value = key;
+  if (persist) { try { localStorage.setItem(TILE_SOURCE_KEY, key); } catch (_) {} }
+}
+map.attributionControl.addAttribution('SGP4 via satellite.js · TLE: CelesTrak');
+setTileSource(tileSourceKey, false);
+(function wireTileSourceSelect() {
+  const sel = document.getElementById('tile-source-select');
+  if (sel) sel.addEventListener('change', (e) => setTileSource(e.target.value));
+})();
 
 function obsIcon(color) {
   const c = color || themeColor('cyan');
@@ -6639,11 +6699,161 @@ function getActiveSats() {
   return state.mySats.filter(s => s.active);
 }
 
+// ============= OMM (GP JSON) SUPPORT — catalog numbers above 99999 =============
+// A TLE's catalog-number field has 5 digits, so objects numbered 100000+ cannot be published
+// as TLE; CelesTrak serves them only in OMM formats (FORMAT=json, CCSDS OMM keywords, up to
+// 9-digit NORAD_CAT_ID). SGP4 never uses the catalog number, so we rebuild a TLE-format line
+// pair from the OMM mean elements (same field widths/precision as a real TLE) and keep the
+// real catalog number in sat.norad. Everything downstream (SGP4, passes, map, 3D, sharing)
+// keeps working on l1/l2 unchanged. For IDs <= 99999 the rebuilt lines are an ordinary TLE.
+const OMM_PLACEHOLDER_SATNUM = '99999';   // written in the 5-char catalog field when ID > 99999
+function isOmmSat(s) { return !!s && Number(s.norad) > 99999; }
+
+function tleChecksum(line68) {
+  let sum = 0;
+  for (let i = 0; i < 68; i++) {
+    const c = line68[i];
+    if (c >= '0' && c <= '9') sum += +c; else if (c === '-') sum += 1;
+  }
+  return sum % 10;
+}
+// 8-char TLE "assumed decimal point" field: sign + 5-digit mantissa + exponent sign + digit
+function tleExpField(v) {
+  if (!isFinite(v) || v === 0) return ' 00000-0';
+  const sign = v < 0 ? '-' : ' ';
+  const a = Math.abs(v);
+  let exp = Math.floor(Math.log10(a)) + 1;
+  let mant = Math.round(a / Math.pow(10, exp) * 1e5);
+  if (mant >= 100000) { mant = 10000; exp += 1; }
+  else if (mant < 10000) { exp -= 1; mant = Math.round(a / Math.pow(10, exp) * 1e5); }
+  if (exp < -9) return ' 00000-0';
+  if (exp > 9) return sign + '99999+9';
+  return sign + String(mant).padStart(5, '0') + (exp < 0 ? '-' : '+') + Math.abs(exp);
+}
+// 10-char first-derivative field: sign + ".dddddddd"
+function tleNdotField(v) {
+  const a = Math.min(Math.abs(v), 0.99999999);
+  return (v < 0 ? '-' : ' ') + a.toFixed(8).slice(1);
+}
+function tleAngle(v) {
+  const x = ((Number(v) % 360) + 360) % 360;
+  const s = x.toFixed(4);
+  return (parseFloat(s) >= 360 ? '0.0000' : s).padStart(8, ' ');
+}
+
+// Convert one OMM record (CelesTrak GP JSON keys) to [line1, line2] in TLE layout.
+function ommToTLE(o) {
+  const norad = Number(o.NORAD_CAT_ID);
+  if (!Number.isInteger(norad) || norad < 0) throw new Error('bad NORAD_CAT_ID');
+  const satnum = norad <= 99999 ? String(norad).padStart(5, '0') : OMM_PLACEHOLDER_SATNUM;
+
+  const m = String(o.EPOCH || '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)/);
+  if (!m) throw new Error('bad EPOCH');
+  const y = +m[1], mo = +m[2], d = +m[3], h = +m[4], mi = +m[5], sec = parseFloat(m[6]);
+  const doy = Math.round((Date.UTC(y, mo - 1, d) - Date.UTC(y, 0, 1)) / 864e5) + 1;
+  const epoch = String(y % 100).padStart(2, '0') +
+    (doy + (h * 3600 + mi * 60 + sec) / 86400).toFixed(8).padStart(12, '0');
+
+  const mm = Number(o.MEAN_MOTION), ecc = Number(o.ECCENTRICITY), inc = Number(o.INCLINATION);
+  const raan = Number(o.RA_OF_ASC_NODE), argp = Number(o.ARG_OF_PERICENTER), ma = Number(o.MEAN_ANOMALY);
+  if (![mm, ecc, inc, raan, argp, ma].every(isFinite) || mm <= 0 || mm >= 100) throw new Error('bad mean elements');
+  const bstar = Number(o.BSTAR) || 0, ndot = Number(o.MEAN_MOTION_DOT) || 0, nddot = Number(o.MEAN_MOTION_DDOT) || 0;
+
+  const idm = String(o.OBJECT_ID || '').match(/^(\d{4})-(\d{3})([A-Z]{0,3})$/);
+  const intl = idm ? (idm[1].slice(2) + idm[2] + idm[3]).padEnd(8, ' ') : ' '.repeat(8);
+  const cls = (String(o.CLASSIFICATION_TYPE || 'U')[0]) || 'U';
+  const elset = String(Math.abs(Math.trunc(Number(o.ELEMENT_SET_NO) || 0)) % 10000).padStart(4, ' ');
+  const rev = String(Math.abs(Math.trunc(Number(o.REV_AT_EPOCH) || 0)) % 100000).padStart(5, ' ');   // TLE pads the rev number with blanks
+
+  const b1 = `1 ${satnum}${cls} ${intl} ${epoch} ${tleNdotField(ndot)} ${tleExpField(nddot)} ${tleExpField(bstar)} 0 ${elset}`;
+  const eccStr = Math.min(Math.max(ecc, 0), 0.9999999).toFixed(7).slice(2);
+  const b2 = `2 ${satnum} ${tleAngle(inc)} ${tleAngle(raan)} ${eccStr} ${tleAngle(argp)} ${tleAngle(ma)} ${mm.toFixed(8).padStart(11, ' ')}${rev}`;
+  if (b1.length !== 68 || b2.length !== 68) throw new Error('TLE layout error');
+  return [b1 + tleChecksum(b1), b2 + tleChecksum(b2)];
+}
+
+// OMM record -> { name, norad, l1, l2 } (same shape parseTLE() returns), or null if unusable
+function ommToSat(o) {
+  try {
+    if (!o || o.NORAD_CAT_ID == null) return null;
+    const [l1, l2] = ommToTLE(o);
+    const rec = satellite.twoline2satrec(l1, l2);
+    if (rec.error) return null;
+    const norad = String(Number(o.NORAD_CAT_ID));
+    return { name: String(o.OBJECT_NAME || `NORAD ${norad}`).trim(), norad, l1, l2 };
+  } catch (_) { return null; }
+}
+
+// Fetch GP data as OMM JSON from CelesTrak. `param` is e.g. 'CATNR=100123' or 'NAME=XYZ'.
+async function fetchOMMRecords(param) {
+  const base = `https://celestrak.org/NORAD/elements/gp.php?${param}&FORMAT=json`;
+  const text = await tryFetch([
+    base,
+    `https://corsproxy.io/?${encodeURIComponent(base)}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(base)}`,
+    `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(base)}`,
+  ]);
+  let arr;
+  try { arr = JSON.parse(text); } catch (_) { return []; }   // e.g. "No GP data found"
+  if (!Array.isArray(arr)) arr = [arr];
+  return arr.map(ommToSat).filter(Boolean);
+}
+
+// Look up satellites by NORAD ID or name. TLE first; OMM (GP JSON) for IDs above 99999,
+// as a fallback when TLE has nothing, and (for name searches) to add objects numbered 100000+.
+async function searchCelestrakGP(query) {
+  const isNorad = /^\d+$/.test(query);
+  let results = [];
+  let firstErr = null;
+
+  if (!(isNorad && Number(query) > 99999)) {
+    try {
+      const base = isNorad
+        ? `https://celestrak.org/NORAD/elements/gp.php?CATNR=${query}&FORMAT=tle`
+        : `https://celestrak.org/NORAD/elements/gp.php?NAME=${encodeURIComponent(query)}&FORMAT=tle`;
+      const text = await tryFetch([
+        base,
+        `https://corsproxy.io/?${encodeURIComponent(base)}`,
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(base)}`,
+        `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(base)}`,
+      ]);
+      if (!/no gp data found/i.test(text) && text.trim().length >= 50) results = parseTLE(text);
+    } catch (e) { firstErr = e; }
+  }
+
+  if (!results.length || !isNorad) {
+    try {
+      const omm = await fetchOMMRecords(isNorad ? `CATNR=${query}` : `NAME=${encodeURIComponent(query)}`);
+      const tleEmpty = results.length === 0;   // decide once, before the loop mutates `results`
+      const have = new Set(results.map(r => r.norad));
+      for (const r of omm) {
+        if (have.has(r.norad)) continue;
+        if (tleEmpty || Number(r.norad) > 99999) { results.push(r); have.add(r.norad); }
+      }
+    } catch (e) { firstErr = firstErr || e; }
+  }
+
+  if (!results.length) {
+    if (firstErr && !/empty response/i.test(firstErr.message)) throw new Error(`Lookup failed: ${firstErr.message}`);
+    throw new Error('No matching satellite found.');
+  }
+  return results;
+}
+
 // Fetch TLE for one or more satellites by NORAD ID, returning hydrated entries with l1/l2
 async function fetchByNoradList(satList) {
   const results = [];
   await Promise.all(satList.map(async (s) => {
     if (!s.norad) return;
+    // IDs above 99999 have no TLE — use the OMM (GP JSON) path
+    if (Number(s.norad) > 99999) {
+      try {
+        const recs = await fetchOMMRecords(`CATNR=${s.norad}`);
+        const hit = recs.find(r => r.norad === String(Number(s.norad)));
+        if (hit) results.push({ ...hit, _requestedName: s.name });
+      } catch (_) { /* skip and continue */ }
+      return;
+    }
     try {
       const base = `https://celestrak.org/NORAD/elements/gp.php?CATNR=${s.norad}&FORMAT=tle`;
       const text = await tryFetch([
@@ -6855,6 +7065,13 @@ function openSatEditor(idx) {
     document.getElementById('sat-query').value = s ? (s.norad || s.name) : '';
   }
 
+  const ommNote = document.getElementById('sat-manual-omm-note');
+  if (ommNote) {
+    const on = isOmmSat(s);
+    ommNote.style.display = on ? 'block' : 'none';
+    if (on) ommNote.textContent = `NORAD ${s.norad} exceeds the 5-digit TLE limit, so no real TLE exists. These lines are rebuilt from NORAD GP (OMM) data; the catalog field shows a placeholder (${OMM_PLACEHOLDER_SATNUM}) and the real ID is stored separately. Use "By Name / ID" to refresh.`;
+  }
+
   document.getElementById('sat-fetch-status').style.display = 'none';
   editor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -6885,31 +7102,16 @@ async function fetchAndSaveSat() {
   status.className = 'note';
   status.textContent = `▸ Searching CelesTrak for "${query}"...`;
 
-  const isNorad = /^\d+$/.test(query);
-  const baseUrl = isNorad
-    ? `https://celestrak.org/NORAD/elements/gp.php?CATNR=${query}&FORMAT=tle`
-    : `https://celestrak.org/NORAD/elements/gp.php?NAME=${encodeURIComponent(query)}&FORMAT=tle`;
-  const urls = [
-    baseUrl,
-    `https://corsproxy.io/?${encodeURIComponent(baseUrl)}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(baseUrl)}`,
-    `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(baseUrl)}`,
-  ];
-
   try {
-    const text = await tryFetch(urls);
-    if (/no gp data found/i.test(text) || text.trim().length < 50) {
-      throw new Error('No matching satellite found.');
-    }
-    const results = parseTLE(text);
-    if (!results.length) throw new Error('Parsed 0 valid TLE entries.');
+    // TLE first; objects numbered 100000+ come from NORAD GP data in OMM (JSON) form
+    const results = await searchCelestrakGP(query);
 
     if (results.length === 1) {
       const r = results[0];
       saveSatToMyList({ name: r.name, norad: r.norad, l1: r.l1, l2: r.l2 });
       status.className = 'ok';
-      status.textContent = `✓ Saved ${r.name} (NORAD ${r.norad}).`;
-      setTimeout(closeSatEditor, 600);
+      status.textContent = `✓ Saved ${r.name} (NORAD ${r.norad})${isOmmSat(r) ? ' — via OMM (GP data); TLE not available for 6-digit IDs.' : '.'}`;
+      setTimeout(closeSatEditor, isOmmSat(r) ? 1600 : 600);
     } else {
       // Multiple matches — let user pick
       status.className = 'ok';
@@ -6922,7 +7124,7 @@ async function fetchAndSaveSat() {
       listEl.innerHTML = capped.map(r => `
         <div class="sat-item-add" data-l1="${r.l1}" data-l2="${r.l2}" data-name="${cssEscape(r.name)}" data-norad="${r.norad}">
           <div class="name">${r.name}</div>
-          <div class="id">${r.norad}</div>
+          <div class="id">${r.norad}${isOmmSat(r) ? ' · OMM' : ''}</div>
           <button class="add-btn" title="Save this satellite">⊕</button>
         </div>`).join('');
       status.appendChild(listEl);
@@ -6962,7 +7164,12 @@ function saveManualSat() {
     alert(`Invalid TLE: ${e.message}`);
     return;
   }
-  saveSatToMyList({ name, norad: extractNorad(l1), l1, l2 });
+  // OMM-derived satellites (ID > 99999) carry a placeholder in the TLE catalog field —
+  // keep the real catalog number instead of the placeholder when re-saving from this tab.
+  const prevSat = (editingSatIdx !== null) ? state.mySats[editingSatIdx] : null;
+  let norad = extractNorad(l1);
+  if (prevSat && isOmmSat(prevSat) && norad === OMM_PLACEHOLDER_SATNUM) norad = prevSat.norad;
+  saveSatToMyList({ name, norad, l1, l2 });
   closeSatEditor();
 }
 
