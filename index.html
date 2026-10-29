@@ -2130,8 +2130,16 @@
           <span>Observer</span>
         </div>
         <div class="legend-row">
-          <div class="legend-swatch" style="background:linear-gradient(90deg,#0a1830,#ffe9b0);"></div>
-          <span>Day / Night</span>
+          <div class="legend-dot" style="background:#ffd36b;box-shadow:0 0 6px #ffb627;"></div>
+          <span>Sunlit</span>
+        </div>
+        <div class="legend-row">
+          <div class="legend-dot" style="background:#050b16;border:1px solid #3a4a66;"></div>
+          <span>Night (eclipse)</span>
+        </div>
+        <div class="legend-row">
+          <div class="legend-swatch" style="background:#ffc060;opacity:0.85;"></div>
+          <span>Terminator</span>
         </div>
         <div class="legend-row" id="globe-foot-toggle" style="cursor:pointer;" title="Toggle observer visibility footprints">
           <div class="legend-dot" style="background:transparent;border:1.5px dashed #00e5ff;"></div>
@@ -7894,11 +7902,48 @@ const Globe = (function () {
     return new THREE.LineSegments(g, m);
   }
 
+  // ----- Earth day/night shader -----
+  // The sunlit/night split is computed per pixel from the sun direction instead of relying on
+  // Phong's soft cosine falloff + ambient light (which left the night side washed out and the
+  // terminator blurry). Result: bright day side, clearly dark night side, a narrow terminator
+  // transition with a warm twilight glow. The shader works in display (sRGB) space.
+  const EARTH_VERT = `
+    varying vec3 vN;
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      vN = normalize(mat3(modelMatrix) * normal);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }`;
+  const EARTH_FRAG = `
+    uniform sampler2D dayMap;
+    uniform float hasMap;
+    uniform vec3 sunDir;
+    varying vec3 vN;
+    varying vec2 vUv;
+    void main() {
+      vec3 n = normalize(vN);
+      float d = dot(n, normalize(sunDir));                 // cos(solar zenith): >0 day, <0 night
+      vec3 base = hasMap > 0.5 ? texture2D(dayMap, vUv).rgb : vec3(0.26, 0.40, 0.54);
+      float lit = smoothstep(-0.06, 0.12, d);              // narrow terminator transition
+      vec3 dayCol = base * (0.72 + 0.50 * clamp(d, 0.0, 1.0));
+      vec3 nightCol = base * 0.09 + vec3(0.004, 0.010, 0.030);
+      vec3 col = mix(nightCol, dayCol, lit);
+      float tw = exp(-pow(d / 0.05, 2.0));                 // thin warm glow right at the terminator
+      col += vec3(1.0, 0.55, 0.20) * tw * 0.18;
+      gl_FragColor = vec4(col, 1.0);
+    }`;
+
   function buildEarth() {
     const geo = new THREE.SphereGeometry(R, 64, 48);
-    earthMat = new THREE.MeshPhongMaterial({
-      color: 0x2a3a4a, emissive: 0x070d14, emissiveIntensity: 1,
-      shininess: 10, specular: 0x101820
+    earthMat = new THREE.ShaderMaterial({
+      uniforms: {
+        dayMap: { value: null },
+        hasMap: { value: 0 },
+        sunDir: { value: new THREE.Vector3(1, 0, 0) }
+      },
+      vertexShader: EARTH_VERT,
+      fragmentShader: EARTH_FRAG
     });
     earth = new THREE.Mesh(geo, earthMat);
     scene.add(earth);
@@ -7915,11 +7960,8 @@ const Globe = (function () {
     const tryTex = () => {
       if (i >= urls.length) { if (graticule) graticule.material.opacity = 0.34; return; }
       loader.load(urls[i++], (tex) => {
-        if (THREE.sRGBEncoding !== undefined) tex.encoding = THREE.sRGBEncoding;
-        earthMat.map = tex;
-        earthMat.color.set(0xffffff);
-        earthMat.emissive.set(0x0a0a0a);
-        earthMat.needsUpdate = true;
+        earthMat.uniforms.dayMap.value = tex;
+        earthMat.uniforms.hasMap.value = 1;
       }, undefined, tryTex);
     };
     tryTex();
@@ -7988,7 +8030,15 @@ const Globe = (function () {
     // Sun direction for day/night lighting
     try {
       const ss = subsolarPoint(when);
-      sunLight.position.copy(latLonAlt(ss.lat, ss.lon, EARTH_KM * 30));
+      const sunPos = latLonAlt(ss.lat, ss.lon, EARTH_KM * 30);
+      sunLight.position.copy(sunPos);
+      if (earthMat && earthMat.uniforms) earthMat.uniforms.sunDir.value.copy(sunPos).normalize();
+      // Terminator: great circle 90° from the subsolar point (sunrise/sunset line)
+      const termPts = ringPoints(latLonAlt(ss.lat, ss.lon, 0).normalize(), Math.PI / 2, R * 1.004, 180);
+      dynamic.add(new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(termPts),
+        new THREE.LineBasicMaterial({ color: 0xffc060, transparent: true, opacity: 0.55 })
+      ));
       // Subsolar surface marker
       const sm = new THREE.Sprite(new THREE.SpriteMaterial({
         map: haloTexture(), color: new THREE.Color('#ffe066'),
